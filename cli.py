@@ -145,12 +145,12 @@ def main():
                 print("   ❌ Gagal resolve parameter, skip.")
                 continue
             print(f"   ✅ Resolved: {resolved}")
-            patcher = PatchExecutor(user_code)
+            patcher = PatchExecutor(user_code, context)
             patched_code = patcher.apply(rule, resolved)
             if patched_code == user_code:
                 print("   ⚠️ Patch tidak mengubah kode, skip.")
                 continue
-            verifier = VerificationEngine(user_code, patched_code)
+            verifier = VerificationEngine(user_code, patched_code, context)
             passed, msg = verifier.verify(rule, resolved)
             if passed:
                 if args.dry_run:

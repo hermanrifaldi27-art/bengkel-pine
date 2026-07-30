@@ -2,8 +2,9 @@ import re
 from typing import Dict, Any
 
 class PatchExecutor:
-    def __init__(self, code: str):
+    def __init__(self, code: str, context: Dict = None):
         self.code = code
+        self.context = context or {}
 
     def apply(self, rule: Dict, resolved: Dict[str, Any]) -> str:
         action = rule.get('action', {})
@@ -11,6 +12,14 @@ class PatchExecutor:
         anchor = action.get('anchor', '')
         template = action.get('template', '')
         target_module = action.get('target_module', '')
+
+        # Type-aware: jika target variabel ada di matrices, ubah template matrix
+        target_var = resolved.get('var')
+        if target_var and target_var in self.context.get('matrices', []):
+            # Pastikan template matrix, bukan array
+            if 'array.shift' in template:
+                template = template.replace('array.shift', 'matrix.remove_row')
+                template = re.sub(r'array\.size\(([^)]+)\)', r'matrix.rows(\1)', template)
 
         for key, val in resolved.items():
             if val is None:
@@ -70,10 +79,8 @@ class PatchExecutor:
     def _replace(self, template: str, anchor: str) -> str:
         if not template:
             return self.code
-        # Jika template masih mengandung placeholder, jangan replace seluruh file
         if '{' in template and '}' in template:
             return self.code
-        # Ganti baris yang mengandung anchor dengan template
         if anchor:
             lines = self.code.splitlines(keepends=True)
             new_lines = []
@@ -90,11 +97,9 @@ class PatchExecutor:
         return template
 
     def _move_to_global(self, template: str) -> str:
-        """Pindahkan kode ke global scope (LEVEL 13) dengan inject di akhir file"""
         return self.code + '\n' + template
 
     def _wrap_with(self, keyword: str, template: str) -> str:
-        """Bungkus kode dengan if/for/while"""
         lines = self.code.splitlines(keepends=True)
         new_lines = []
         wrapped = False
@@ -112,7 +117,6 @@ class PatchExecutor:
         return ''.join(new_lines)
 
     def _add_prefix(self, prefix: str, template: str) -> str:
-        """Tambahkan prefix ke baris yang mengandung anchor"""
         lines = self.code.splitlines(keepends=True)
         new_lines = []
         for line in lines:
@@ -123,12 +127,10 @@ class PatchExecutor:
         return ''.join(new_lines)
 
     def _add_parameter(self, anchor: str, template: str) -> str:
-        """Tambahkan parameter ke input() / function call"""
         lines = self.code.splitlines(keepends=True)
         new_lines = []
         for line in lines:
             if anchor in line:
-                # Cari tanda kurung buka pertama
                 match = re.search(r'\(([^)]*)\)', line)
                 if match:
                     existing = match.group(1)

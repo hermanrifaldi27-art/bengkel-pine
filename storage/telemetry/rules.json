@@ -1,7 +1,7 @@
 {
   "cleanup.fifo.shift": {
-    "usage_count": 14,
-    "success_count": 12,
+    "usage_count": 16,
+    "success_count": 14,
     "failure_count": 2
   },
   "state.matrix.bank": {
@@ -30,8 +30,8 @@
     "failure_count": 0
   },
   "cleanup.matrix.remove_row": {
-    "usage_count": 2,
-    "success_count": 2,
-    "failure_count": 0
+    "usage_count": 4,
+    "success_count": 3,
+    "failure_count": 1
   }
 }
