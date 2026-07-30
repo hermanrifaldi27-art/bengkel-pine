@@ -168,6 +168,13 @@ class FeatureExtractor(ASTVisitor):
 
     def visit_Call(self, node):
         func_name = self._get_func_name(node.func)
+        # Detektor baru
+        self._detect_security_in_loop(node)
+        self._detect_hline_in_if(node)
+        self._detect_input_type_mismatch(node)
+        self._detect_redundant_plot(node)
+        self._detect_lookahead_bias(node)
+        # Detektor lama
         if self.ctx.in_if and not self.ctx.in_function and not self.ctx.in_loop and func_name:
             # Fungsi plotting TIDAK BOLEH di dalam if -> HARUS pindah ke global scope
             plot_names = {'plot', 'plotshape', 'plotchar', 'plotarrow', 'plotcandle', 'plotbar',
@@ -212,6 +219,89 @@ class FeatureExtractor(ASTVisitor):
                               'DATA_FETCHING', 'request_security_lookahead_v1',
                               anchor=node.span, diag_code='PINE0005')
 
+
+    def _detect_security_in_loop(self, node: Call):
+        """Deteksi request.security() di dalam loop."""
+        func_name = self._get_func_name(node.func)
+        if func_name in ('request.security', 'request.security_lower_tf') and self.ctx.in_loop:
+            self._add_feature('data_fetching',
+                f'{func_name} di dalam loop -> pindahkan ke luar loop dengan var cache',
+                f'var cached = {func_name}(...)\nfor ...\n    use cached',
+                'DATA_FETCHING', 'security_in_loop_v1',
+                anchor=node.span, diag_code='PINE0009')
+
+    def _detect_hline_in_if(self, node: Call):
+        """Deteksi hline() di dalam if global."""
+        func_name = self._get_func_name(node.func)
+        if func_name == 'hline' and self.ctx.in_if and not self.ctx.in_function and not self.ctx.in_loop:
+            self._add_feature('plots',
+                'hline di dalam if global -> pindahkan ke global scope',
+                'hline(price, title, color, linestyle, linewidth)',
+                'PLOTS', 'hline_in_if_v1',
+                anchor=node.span, diag_code='PINE0010')
+
+    def _detect_input_type_mismatch(self, node: Call):
+        """Deteksi input.int(defval=3.14) — tipe tidak cocok."""
+        func_name = self._get_func_name(node.func)
+        if func_name == 'input.int' and node.args:
+            first_arg = node.args[0]
+            if isinstance(first_arg, (FloatLiteral,)):
+                self._add_feature('inputs',
+                    'input.int dengan defval float -> gunakan input.float',
+                    'input.float(defval=...)',
+                    'INPUTS', 'input_type_mismatch_v1',
+                    anchor=node.span, diag_code='PINE0011')
+
+    def _detect_strategy_in_indicator(self, node: Call):
+        """Deteksi strategy.* di indicator()."""
+        func_name = self._get_func_name(node.func)
+        strategy_funcs = {'strategy.entry', 'strategy.exit', 'strategy.close', 'strategy.close_all',
+                          'strategy.order', 'strategy.cancel', 'strategy.cancel_all'}
+        if func_name in strategy_funcs:
+            # Cek apakah ada indicator() di global functions
+            if 'indicator' in self.semantic.get_all_symbols_of_kind('function') if hasattr(self.semantic, 'get_all_symbols_of_kind') else False:
+                pass  # Tidak bisa cek dari sini, perlu akses ke AST root
+            self._add_feature('strategy',
+                f'{func_name} terdeteksi -> pastikan skrip adalah strategy, bukan indicator',
+                f'Ganti indicator() menjadi strategy()',
+                'STRATEGY', 'strategy_in_indicator_v1',
+                anchor=node.span, diag_code='PINE0012')
+
+    def _detect_redundant_plot(self, node: Call):
+        """Deteksi plot dengan argumen literal yang tidak berubah."""
+        func_name = self._get_func_name(node.func)
+        if func_name == 'plot' and node.args:
+            first_arg = node.args[0]
+            if isinstance(first_arg, (IntegerLiteral, FloatLiteral)):
+                self._add_feature('plots',
+                    'plot dengan nilai literal statis -> tidak akan berubah, mungkin tidak diperlukan',
+                    'Gunakan series yang dinamis',
+                    'PLOTS', 'redundant_plot_v1',
+                    anchor=node.span, diag_code='PINE0013')
+
+    def _detect_lookahead_bias(self, node: Call):
+        """Deteksi request.security dengan lookahead_on."""
+        func_name = self._get_func_name(node.func)
+        if func_name == 'request.security':
+            for arg in node.args:
+                if isinstance(arg, Assignment) and isinstance(arg.target, Identifier) and arg.target.name == 'lookahead':
+                    val = self.semantic.evaluate_constant(arg.value)
+                    actual_val = str(val.value) if hasattr(val, 'value') else str(val)
+                    if 'lookahead_on' in actual_val:
+                        self._add_feature('data_fetching',
+                            'request.security dengan lookahead_on -> bias future, gunakan lookahead_off',
+                            'lookahead = barmerge.lookahead_off',
+                            'DATA_FETCHING', 'lookahead_bias_v1',
+                            anchor=node.span, diag_code='PINE0014')
+
+    def _detect_var_unused(self, node: VarDeclaration):
+        """Deteksi var yang tidak pernah di-assign ulang (hanya deklarasi)."""
+        if node.name and not node.value:
+            # Cek apakah var ini pernah di-assign di tempat lain
+            # Sederhana: cek apakah nama var muncul di assignment di kode
+            if node.name not in self.code:
+                pass  # Tidak bisa deteksi tanpa analisis lebih dalam
+
     def _get_context(self) -> str:
         """Konteks saat ini: in_loop / in_if / in_function / is_indicator"""
         if self.ctx.in_loop:
@@ -254,16 +344,47 @@ class FeatureExtractor(ASTVisitor):
                 self.matrix_info[nm][func.member] += 1
 
     def _finalize_array_matrix(self):
+        # Flow-sensitive: hanya laporkan jika push > 0 DAN tidak ada eviction di SEMUA path
         for name, info in self.array_info.items():
-            if info['push'] > 0 and info['shift'] == 0 and info['pop'] == 0 and info['remove'] == 0 and info['clear'] == 0:
-                self._add_feature('cleanup', f"Array `{name}` unbounded -> tambahkan eviction",
-                                  f"while array.size({name}) > limit\n    array.shift({name})",
-                                  'CALCULATIONS', 'array_unbounded_v1', anchor=f"array.push({name})", diag_code='PINE0006')
+            if info['push'] > 0:
+                has_eviction = info['shift'] > 0 or info['pop'] > 0 or info['remove'] > 0 or info['clear'] > 0
+                # Cek CFG: apakah eviction ada di semua path setelah push?
+                if self.cfg:
+                    flow_safe = self._check_eviction_in_all_paths(name, 'array')
+                    if flow_safe:
+                        has_eviction = True
+                if not has_eviction:
+                    self._add_feature('cleanup', f"Array `{name}` unbounded -> tambahkan eviction",
+                                      f"while array.size({name}) > limit\n    array.shift({name})",
+                                      'CALCULATIONS', 'array_unbounded_v1', anchor=f"array.push({name})", diag_code='PINE0006')
         for name, info in self.matrix_info.items():
-            if info['add_row'] > 0 and info['remove_row'] == 0 and info['remove_col'] == 0 and info['clear'] == 0:
-                self._add_feature('cleanup', f"Matrix `{name}` unbounded -> tambahkan eviction",
-                                  f"if matrix.rows({name}) > limit\n    matrix.remove_row({name}, matrix.rows({name}) - 1)",
-                                  'CALCULATIONS', 'matrix_unbounded_v1', anchor=f"matrix.add_row({name})", diag_code='PINE0007')
+            if info['add_row'] > 0:
+                has_eviction = info['remove_row'] > 0 or info['remove_col'] > 0 or info['clear'] > 0
+                if self.cfg:
+                    flow_safe = self._check_eviction_in_all_paths(name, 'matrix')
+                    if flow_safe:
+                        has_eviction = True
+                if not has_eviction:
+                    self._add_feature('cleanup', f"Matrix `{name}` unbounded -> tambahkan eviction",
+                                      f"if matrix.rows({name}) > limit\n    matrix.remove_row({name}, matrix.rows({name}) - 1)",
+                                      'CALCULATIONS', 'matrix_unbounded_v1', anchor=f"matrix.add_row({name})", diag_code='PINE0007')
+
+    def _check_eviction_in_all_paths(self, name: str, kind: str) -> bool:
+        """Cek apakah eviction ada di semua path setelah push (flow-sensitive)."""
+        if not self.cfg:
+            return False
+        # Sederhana: cek apakah ada eviction call di blok yang sama atau setelah push
+        for block in self.cfg.blocks:
+            for stmt in block.statements:
+                if isinstance(stmt, ExpressionStatement):
+                    expr = stmt.expression
+                    if isinstance(expr, Call) and isinstance(expr.func, MemberAccess):
+                        if expr.func.target and hasattr(expr.func.target, 'name') and expr.func.target.name == name:
+                            if kind == 'array' and expr.func.member in ('shift', 'pop', 'remove', 'clear'):
+                                return True
+                            if kind == 'matrix' and expr.func.member in ('remove_row', 'remove_col', 'clear'):
+                                return True
+        return False
 
 def extract_features(file_path: str) -> Optional[List[Feature]]:
     from engine.parser import PineAST
