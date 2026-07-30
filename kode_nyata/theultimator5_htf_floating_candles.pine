@@ -1,0 +1,592 @@
+// This source code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © theUltimator5
+
+//@version=6
+indicator("HTF Floating Candles w/ Volume Footprint [theUltimator5]", overlay=true,
+     max_boxes_count=500, max_lines_count=500, max_labels_count=50,
+     max_bars_back=5000)
+
+
+higher_timeframe   = input.timeframe("D",  title="Higher Timeframe")
+num_candles_to_show  = input.int(1,   title="Number of HTF Candles",           minval=1,  maxval=10)
+candle_width_bars    = input.int(10,  title="Candle Width (bars)",              minval=1,  maxval=100)
+candle_spacing_bars  = input.int(3,   title="Spacing Between Candles (bars)",   minval=0,  maxval=50)
+candle_offset_bars   = input.int(25,  title="Offset from Right Edge (bars)",    minval=0,  maxval=200)
+profile_width_bars   = input.int(20,  title="Max Profile Width (bars)",         minval=1,  maxval=50)
+cnum                 = input.int(24,  title="Profile Row Count",                minval=5,  maxval=100)
+ticks_per_row        = input.int(10,  title="Ticks Per Footprint Row",          minval=1)
+
+profile_mode = input.string("Split", title="Profile Layout",
+     options=["Split", "Stacked Left"],
+     tooltip="Split: buy left / sell right of candles.  Stacked Left: both profiles on the left, buy outermost and sell inner (flush to candle).")
+
+bullish_fill_color  = input.color(color.lime,              title="Bullish Fill Color")
+bullish_line_color  = input.color(color.lime,              title="Bullish Line Color")
+bearish_fill_color  = input.color(color.red,               title="Bearish Fill Color")
+bearish_line_color  = input.color(color.rgb(255,120,120),  title="Bearish Line Color")
+body_transparency   = input.int(90,                        title="Body Transparency",  minval=0, maxval=100)
+line_thickness      = input.int(2,                         title="Line Thickness",     minval=1, maxval=10)
+
+buy_color    = input.color(color.new(color.teal, 50), title="Buy Volume Color")
+sell_color   = input.color(color.new(color.red,  50), title="Sell Volume Color")
+
+use_vol_transparency = input.bool(false, title="Auto Transparency by Volume Magnitude",
+     tooltip="When enabled, lower-volume rows become more transparent and higher-volume rows more opaque.")
+
+show_poc_line  = input.bool(false,         title="Show POC Line",      group="POC Line")
+poc_color      = input.color(color.yellow, title="POC Line Color",     group="POC Line")
+poc_line_width = input.int(1,              title="POC Line Width",     group="POC Line", minval=1, maxval=5)
+
+show_va_lines   = input.bool(false,                          title="Show VAH/VAL Lines",  group="Value Area Lines")
+va_percent           = input.int(70,  title="Value Area %",                     minval=1,  maxval=100, group = "Value Area Lines")
+vah_color       = input.color(color.new(color.aqua,   20),  title="VAH Line Color",      group="Value Area Lines")
+val_color       = input.color(color.new(color.orange, 20),  title="VAL Line Color",      group="Value Area Lines")
+va_line_width   = input.int(1,                               title="VA Line Width",       group="Value Area Lines", minval=1, maxval=5)
+va_line_style_input = input.string("Dashed", title="VA Line Style", group="Value Area Lines",
+     options=["Solid", "Dashed", "Dotted"])
+
+show_center_label   = input.bool(true,        title="Show Timeframe Label")
+show_h_lines        = input.bool(false,       title="Show Horizontal Reference Lines",  group="Reference Lines")
+h_line_color        = input.color(color.gray, title="Line Color",                       group="Reference Lines")
+h_line_width        = input.int(1,            title="Line Width",                       group="Reference Lines", minval=1, maxval=5)
+
+show_net_delta      = input.bool(true,                title="Show Net Delta Bar",       group="Net Delta Bar")
+net_buy_color        = input.color(color.teal,         title="Net Buy Color",            group="Net Delta Bar")
+net_sell_color       = input.color(color.red,          title="Net Sell Color",           group="Net Delta Bar")
+net_line_color       = input.color(color.yellow,       title="Range Line Color",         group="Net Delta Bar")
+net_center_color     = input.color(color.gray,         title="Center Tick Color",        group="Net Delta Bar")
+net_bar_gap_pct      = input.float(5,                 title="Gap Above Candles (%)",    group="Net Delta Bar", minval=0,  maxval=100)
+net_bar_height_pct   = input.float(8,                  title="Bar Height (%)",           group="Net Delta Bar", minval=1,  maxval=50)
+net_delta_label      = input.bool(true,                title="Show 'Net Volume' Label",  group="Net Delta Bar")
+
+footprint reqFP = request.footprint(ticks_per_row, va_percent)
+
+var array<float> htf_open  = array.new<float>()
+var array<float> htf_high  = array.new<float>()
+var array<float> htf_low   = array.new<float>()
+var array<float> htf_close = array.new<float>()
+
+var array<int>   htf_high_bar   = array.new<int>()
+var array<int>   htf_low_bar    = array.new<int>()
+var array<int>   htf_start_bar  = array.new<int>()
+
+var float current_htf_open      = na
+var float current_htf_high      = na
+var float current_htf_low       = na
+var float current_htf_close     = na
+var int   current_htf_high_bar  = na
+var int   current_htf_low_bar   = na
+var int   current_htf_start_bar = na
+
+bool new_htf_candle_started = timeframe.change(higher_timeframe)
+
+if new_htf_candle_started
+    if not na(current_htf_open)
+        array.push(htf_open,      current_htf_open)
+        array.push(htf_high,      current_htf_high)
+        array.push(htf_low,       current_htf_low)
+        array.push(htf_close,     current_htf_close)
+        array.push(htf_high_bar,  current_htf_high_bar)
+        array.push(htf_low_bar,   current_htf_low_bar)
+        array.push(htf_start_bar, current_htf_start_bar)
+
+        int candles_to_keep = num_candles_to_show + 5
+        while array.size(htf_open) > candles_to_keep
+            array.shift(htf_open)
+            array.shift(htf_high)
+            array.shift(htf_low)
+            array.shift(htf_close)
+            array.shift(htf_high_bar)
+            array.shift(htf_low_bar)
+            array.shift(htf_start_bar)
+
+    current_htf_open      := open
+    current_htf_high      := high
+    current_htf_low       := low
+    current_htf_close     := close
+    current_htf_high_bar  := bar_index
+    current_htf_low_bar   := bar_index
+    current_htf_start_bar := bar_index
+
+else
+    if not na(current_htf_open)
+        if high > current_htf_high
+            current_htf_high     := high
+            current_htf_high_bar := bar_index
+        if low < current_htf_low
+            current_htf_low     := low
+            current_htf_low_bar := bar_index
+        current_htf_close := close
+
+get_candle_data(int slot) =>
+    float o      = na,  float h      = na
+    float l      = na,  float c      = na
+    int   h_bar  = na,  int   l_bar  = na
+    int   s_bar  = na
+
+    bool  has_current = not na(current_htf_open)
+    int   num_done    = array.size(htf_close)
+
+    if slot == 0 and has_current
+        o     := current_htf_open
+        h     := current_htf_high
+        l     := current_htf_low
+        c     := current_htf_close
+        h_bar := current_htf_high_bar
+        l_bar := current_htf_low_bar
+        s_bar := current_htf_start_bar
+    else
+        int arr_offset = has_current ? slot - 1 : slot
+        int arr_idx    = num_done - 1 - arr_offset
+        if arr_idx >= 0 and arr_idx < num_done
+            o     := array.get(htf_open,      arr_idx)
+            h     := array.get(htf_high,      arr_idx)
+            l     := array.get(htf_low,       arr_idx)
+            c     := array.get(htf_close,     arr_idx)
+            h_bar := array.get(htf_high_bar,  arr_idx)
+            l_bar := array.get(htf_low_bar,   arr_idx)
+            s_bar := array.get(htf_start_bar, arr_idx)
+
+    [o, h, l, c, h_bar, l_bar, s_bar]
+
+candle_x(int slot) =>
+    int position      = num_candles_to_show - 1 - slot
+    int offset        = candle_offset_bars + (position * (candle_width_bars + candle_spacing_bars))
+    int cl            = bar_index + 1 + offset
+    int cr            = cl + candle_width_bars
+    int cx            = math.round((cl + cr) / 2)
+    [cl, cr, cx]
+
+var array<box>  candle_bodies = array.new<box>()
+var array<line> upper_wicks   = array.new<line>()
+var array<line> lower_wicks   = array.new<line>()
+
+var array<line> ref_high_lines = array.new<line>()
+var array<line> ref_low_lines  = array.new<line>()
+
+var label tf_label = na
+
+var line poc_line_obj = na
+var line vah_line_obj = na
+var line val_line_obj = na
+
+var box   net_delta_box   = na
+var line  net_delta_hline = na
+var line  net_delta_vline = na
+var label net_delta_lbl   = na
+
+var bool drawings_initialized = false
+
+if not drawings_initialized and barstate.isfirst
+    for i = 0 to num_candles_to_show - 1
+        [cl, cr, cx] = candle_x(i)
+        array.push(candle_bodies, box.new(cl, high, cr, low,
+             bgcolor=color.new(color.gray, 100), border_color=color.new(color.gray, 100),
+             border_width=line_thickness, xloc=xloc.bar_index))
+        array.push(upper_wicks, line.new(cx, high, cx, high,
+             color=color.new(color.gray, 100), width=line_thickness, xloc=xloc.bar_index))
+        array.push(lower_wicks, line.new(cx, low, cx, low,
+             color=color.new(color.gray, 100), width=line_thickness, xloc=xloc.bar_index))
+        array.push(ref_high_lines, line.new(bar_index, high, cx, high,
+             color=color.new(color.gray, 100), width=h_line_width,
+             style=line.style_dashed, xloc=xloc.bar_index))
+        array.push(ref_low_lines, line.new(bar_index, low, cx, low,
+             color=color.new(color.gray, 100), width=h_line_width,
+             style=line.style_dashed, xloc=xloc.bar_index))
+    drawings_initialized := true
+
+if drawings_initialized
+    for slot = 0 to num_candles_to_show - 1
+        [o, h, l, c, h_bar, l_bar, s_bar] = get_candle_data(slot)
+        [cl, cr, cx] = candle_x(slot)
+
+        box  body  = array.get(candle_bodies, slot)
+        line uwck  = array.get(upper_wicks,   slot)
+        line lwck  = array.get(lower_wicks,   slot)
+        line rh    = array.get(ref_high_lines, slot)
+        line rl    = array.get(ref_low_lines,  slot)
+
+        if not na(o)
+            bool  bull = c >= o
+            color fc   = bull ? bullish_fill_color : bearish_fill_color
+            color lc   = bull ? bullish_line_color : bearish_line_color
+
+            box.set_left(body,         cl)
+            box.set_right(body,        cr)
+            box.set_top(body,          math.max(o, c))
+            box.set_bottom(body,       math.min(o, c))
+            box.set_bgcolor(body,      color.new(fc, body_transparency))
+            box.set_border_color(body, lc)
+
+            if h > math.max(o, c)
+                line.set_xy1(uwck, cx, math.max(o, c))
+                line.set_xy2(uwck, cx, h)
+                line.set_color(uwck, lc)
+            else
+                line.set_color(uwck, color.new(lc, 100))
+
+            if l < math.min(o, c)
+                line.set_xy1(lwck, cx, math.min(o, c))
+                line.set_xy2(lwck, cx, l)
+                line.set_color(lwck, lc)
+            else
+                line.set_color(lwck, color.new(lc, 100))
+
+            if show_h_lines and not na(h_bar) and not na(l_bar)
+                line.set_xy1(rh, h_bar, h)
+                line.set_xy2(rh, cx,    h)
+                line.set_color(rh, h_line_color)
+                line.set_xy1(rl, l_bar, l)
+                line.set_xy2(rl, cx,    l)
+                line.set_color(rl, h_line_color)
+            else
+                line.set_color(rh, color.new(color.gray, 100))
+                line.set_color(rl, color.new(color.gray, 100))
+        else
+            box.set_bgcolor(body,      color.new(color.gray, 100))
+            box.set_border_color(body, color.new(color.gray, 100))
+            line.set_color(uwck, color.new(color.gray, 100))
+            line.set_color(lwck, color.new(color.gray, 100))
+            line.set_color(rh,   color.new(color.gray, 100))
+            line.set_color(rl,   color.new(color.gray, 100))
+
+if barstate.islast and show_center_label
+    [cl_left,  cr_left,  cx_left]  = candle_x(num_candles_to_show - 1)
+    [cl_right, cr_right, cx_right] = candle_x(0)
+    int label_cx = math.round((cx_left + cx_right) / 2)
+
+    float global_low = na
+    for slot = 0 to num_candles_to_show - 1
+        [o, h, l, c, h_bar, l_bar, s_bar] = get_candle_data(slot)
+        if not na(l)
+            global_low := na(global_low) ? l : math.min(global_low, l)
+
+    if not na(tf_label)
+        label.delete(tf_label)
+
+    string tf_text = higher_timeframe == "D" or higher_timeframe == "1D" ? "Daily" :
+                     higher_timeframe == "W" or higher_timeframe == "1W" ? "Weekly" :
+                     higher_timeframe == "M" or higher_timeframe == "1M" ? "Monthly" :
+                     higher_timeframe == "60"  ? "1H"  : higher_timeframe == "120" ? "2H" :
+                     higher_timeframe == "240" ? "4H"  : higher_timeframe == "720" ? "12H" :
+                     higher_timeframe
+
+    tf_label := label.new(label_cx, global_low - (high - low) * 0.5,
+         text=tf_text, color=color.new(color.white, 100), textcolor=color.white,
+         style=label.style_none, size=size.small, xloc=xloc.bar_index)
+
+var box[] buy_boxes  = array.new_box()
+var box[] sell_boxes = array.new_box()
+
+if barstate.islast
+
+    float range_hi = na
+    float range_lo = na
+
+    for slot = 0 to num_candles_to_show - 1
+        [o, h, l, c, h_bar, l_bar, s_bar] = get_candle_data(slot)
+        if not na(h)
+            range_hi := na(range_hi) ? h : math.max(range_hi, h)
+        if not na(l)
+            range_lo := na(range_lo) ? l : math.min(range_lo, l)
+
+    if not na(range_hi) and not na(range_lo) and range_hi > range_lo
+
+        int earliest_start_bar = bar_index
+        for slot = 0 to num_candles_to_show - 1
+            [o, h, l, c, h_bar, l_bar, s_bar] = get_candle_data(slot)
+            if not na(s_bar) and s_bar < earliest_start_bar
+                earliest_start_bar := s_bar
+
+        int total_bars = bar_index - earliest_start_bar + 1
+
+        int effective_cnum = math.min(cnum, math.max(1, total_bars))
+
+        float step = (range_hi - range_lo) / effective_cnum
+        float dist = (range_hi - range_lo) / 500
+
+        float[] buy_vols  = array.new_float(effective_cnum, 0.)
+        float[] sell_vols = array.new_float(effective_cnum, 0.)
+
+        for bars = 0 to total_bars - 1
+            float bar_price = hl2[bars]
+
+            if bar_price < range_lo or bar_price > range_hi
+                continue
+
+            int row_idx = math.floor((bar_price - range_lo) / step)
+            row_idx := math.min(row_idx, effective_cnum - 1)
+
+            float bv = na(reqFP[bars]) ? 0. : footprint.buy_volume(reqFP[bars])
+            float sv = na(reqFP[bars]) ? 0. : footprint.sell_volume(reqFP[bars])
+
+            array.set(buy_vols,  row_idx, array.get(buy_vols,  row_idx) + bv)
+            array.set(sell_vols, row_idx, array.get(sell_vols, row_idx) + sv)
+
+        float max_buy  = 0.
+        float max_sell = 0.
+        float max_combined_total = 0.
+        float total_buy_vol_sum  = 0.
+        float total_sell_vol_sum = 0.
+        for x = 0 to effective_cnum - 1
+            float bv = array.get(buy_vols,  x)
+            float sv = array.get(sell_vols, x)
+            if bv > max_buy
+                max_buy  := bv
+            if sv > max_sell
+                max_sell := sv
+            if bv + sv > max_combined_total
+                max_combined_total := bv + sv
+            total_buy_vol_sum  += bv
+            total_sell_vol_sum += sv
+
+        [cl_left,  cr_left,  cx_left]  = candle_x(num_candles_to_show - 1)
+        [cl_right, cr_right, cx_right] = candle_x(0)
+
+        for b in buy_boxes
+            box.delete(b)
+        for b in sell_boxes
+            box.delete(b)
+        array.clear(buy_boxes)
+        array.clear(sell_boxes)
+
+        for x = 0 to effective_cnum - 1
+            float row_bot = range_lo + step * x
+            float row_top = row_bot + step
+
+            float bv = array.get(buy_vols,  x)
+            float sv = array.get(sell_vols, x)
+
+            float max_row_vol = math.max(max_buy, max_sell)
+            int buy_w  = max_row_vol > 0 ? math.max(1, math.round((bv / max_row_vol) * profile_width_bars)) : 1
+            int sell_w = max_row_vol > 0 ? math.max(1, math.round((sv / max_row_vol) * profile_width_bars)) : 1
+
+            float buy_base_transp  = color.t(buy_color)
+            float sell_base_transp = color.t(sell_color)
+
+            color final_buy_color  = buy_color
+            color final_sell_color = sell_color
+
+            if use_vol_transparency and max_combined_total > 0
+                float combined = bv + sv
+                float ratio = combined / max_combined_total
+                int max_transp = 95
+                int buy_transp  = math.round(max_transp - ratio * (max_transp - buy_base_transp))
+                int sell_transp = math.round(max_transp - ratio * (max_transp - sell_base_transp))
+                buy_transp  := math.max(0, math.min(100, buy_transp))
+                sell_transp := math.max(0, math.min(100, sell_transp))
+                final_buy_color  := color.new(color.rgb(color.r(buy_color),  color.g(buy_color),  color.b(buy_color)),  buy_transp)
+                final_sell_color := color.new(color.rgb(color.r(sell_color), color.g(sell_color), color.b(sell_color)), sell_transp)
+
+            if profile_mode == "Split"
+                int buy_right = cl_left  - 1
+                int sell_left = cr_right + 1
+
+                array.push(buy_boxes, box.new(
+                     buy_right - buy_w,  row_top - dist,
+                     buy_right,          row_bot + dist,
+                     border_width=0, bgcolor=final_buy_color, xloc=xloc.bar_index))
+
+                array.push(sell_boxes, box.new(
+                     sell_left,          row_top - dist,
+                     sell_left + sell_w, row_bot + dist,
+                     border_width=0, bgcolor=final_sell_color, xloc=xloc.bar_index))
+
+            else
+
+                int total_w        = max_combined_total > 0 ? math.max(1, math.round(((bv + sv) / max_combined_total) * profile_width_bars)) : 1
+                int sell_w_stacked = (bv + sv) > 0 ? math.round(total_w * (sv / (bv + sv))) : 0
+                int buy_w_stacked  = total_w - sell_w_stacked
+
+                int sell_right     = cl_left - 1
+                int sell_left_edge = sell_right - sell_w_stacked
+                int buy_right      = sell_left_edge - 1
+
+                if sell_w_stacked > 0
+                    array.push(sell_boxes, box.new(
+                         sell_left_edge,  row_top - dist,
+                         sell_right,      row_bot + dist,
+                         border_width=0, bgcolor=final_sell_color, xloc=xloc.bar_index))
+
+                if buy_w_stacked > 0
+                    array.push(buy_boxes, box.new(
+                         buy_right - buy_w_stacked,  row_top - dist,
+                         buy_right,                  row_bot + dist,
+                         border_width=0, bgcolor=final_buy_color, xloc=xloc.bar_index))
+
+
+        // ── Net Delta Bar ────────────────────────────────────────────────────
+        int net_left_extent  = na
+        int net_right_extent = na
+
+        if profile_mode == "Split"
+            net_left_extent  := cl_left  - 1 - profile_width_bars
+            net_right_extent := cr_right + 1 + profile_width_bars
+        else
+            net_left_extent  := cl_left - 1 - (2 * profile_width_bars)
+            net_right_extent := cr_right
+
+        if show_net_delta
+            float net_y_center = range_hi + (range_hi - range_lo) * (net_bar_gap_pct / 100)
+            float net_half_h   = (range_hi - range_lo) * (net_bar_height_pct / 100) / 2
+            int   net_x_center = math.round((net_left_extent + net_right_extent) / 2)
+
+            float total_buy_sell = total_buy_vol_sum + total_sell_vol_sum
+            float net_ratio      = total_buy_sell > 0 ? (total_buy_vol_sum - total_sell_vol_sum) / total_buy_sell : 0.0
+            float half_span      = (net_right_extent - net_left_extent) / 2
+            int   box_w          = math.round(math.abs(net_ratio) * half_span)
+
+            int   box_left  = net_ratio >= 0 ? net_x_center - box_w : net_x_center
+            int   box_right = net_ratio >= 0 ? net_x_center : net_x_center + box_w
+            color box_col   = net_ratio >= 0 ? net_buy_color : net_sell_color
+
+            // Range line
+            if na(net_delta_hline)
+                net_delta_hline := line.new(net_left_extent, net_y_center, net_right_extent, net_y_center,
+                     color=net_line_color, width=1, xloc=xloc.bar_index)
+            else
+                line.set_xy1(net_delta_hline, net_left_extent,  net_y_center)
+                line.set_xy2(net_delta_hline, net_right_extent, net_y_center)
+                line.set_color(net_delta_hline, net_line_color)
+
+            // Center tick (equal buy/sell marker)
+            if na(net_delta_vline)
+                net_delta_vline := line.new(net_x_center, net_y_center - net_half_h, net_x_center, net_y_center + net_half_h,
+                     color=net_center_color, width=2, xloc=xloc.bar_index)
+            else
+                line.set_xy1(net_delta_vline, net_x_center, net_y_center - net_half_h)
+                line.set_xy2(net_delta_vline, net_x_center, net_y_center + net_half_h)
+                line.set_color(net_delta_vline, net_center_color)
+
+            // Net buy/sell fill box
+            if na(net_delta_box)
+                net_delta_box := box.new(box_left, net_y_center + net_half_h, box_right, net_y_center - net_half_h,
+                     border_width=0, bgcolor=box_col, xloc=xloc.bar_index)
+            else
+                box.set_left(net_delta_box,         box_left)
+                box.set_right(net_delta_box,        box_right)
+                box.set_top(net_delta_box,           net_y_center + net_half_h)
+                box.set_bottom(net_delta_box,        net_y_center - net_half_h)
+                box.set_bgcolor(net_delta_box,       box_col)
+                box.set_border_color(net_delta_box,  box_col)
+
+            // Label
+            if net_delta_label
+                if na(net_delta_lbl)
+                    net_delta_lbl := label.new(net_x_center, net_y_center + net_half_h * 1.5,
+                         text="Net volume", color=color.new(color.white, 100), textcolor=color.white,
+                         style=label.style_none, size=size.small, xloc=xloc.bar_index)
+                else
+                    label.set_xy(net_delta_lbl, net_x_center, net_y_center + net_half_h * 1.5)
+            else
+                if not na(net_delta_lbl)
+                    label.delete(net_delta_lbl)
+                    net_delta_lbl := na
+        else
+            if not na(net_delta_hline)
+                line.delete(net_delta_hline)
+                net_delta_hline := na
+            if not na(net_delta_vline)
+                line.delete(net_delta_vline)
+                net_delta_vline := na
+            if not na(net_delta_box)
+                box.delete(net_delta_box)
+                net_delta_box := na
+            if not na(net_delta_lbl)
+                label.delete(net_delta_lbl)
+                net_delta_lbl := na
+
+        // ── POC ──────────────────────────────────────────────────────────────
+        int   poc_row_idx = 0
+        float poc_max_vol = 0.
+        for x = 0 to effective_cnum - 1
+            float combined = array.get(buy_vols, x) + array.get(sell_vols, x)
+            if combined > poc_max_vol
+                poc_max_vol  := combined
+                poc_row_idx  := x
+
+        float poc_price = range_lo + step * poc_row_idx + step * 0.5
+
+        [cl_poc, cr_poc, cx_poc] = candle_x(0)
+
+        if show_poc_line
+            if na(poc_line_obj)
+                poc_line_obj := line.new(earliest_start_bar, poc_price, cx_poc, poc_price,
+                     color=poc_color, width=poc_line_width,
+                     style=line.style_dashed, xloc=xloc.bar_index)
+            else
+                line.set_xy1(poc_line_obj, earliest_start_bar, poc_price)
+                line.set_xy2(poc_line_obj, cx_poc,             poc_price)
+                line.set_color(poc_line_obj, poc_color)
+                line.set_width(poc_line_obj, poc_line_width)
+        else
+            if not na(poc_line_obj)
+                line.delete(poc_line_obj)
+                poc_line_obj := na
+
+        float total_vol = 0.
+        for x = 0 to effective_cnum - 1
+            total_vol += array.get(buy_vols, x) + array.get(sell_vols, x)
+
+        float va_target   = total_vol * va_percent / 100
+        float va_accum    = array.get(buy_vols, poc_row_idx) + array.get(sell_vols, poc_row_idx)
+        int   vah_row_idx = poc_row_idx
+        int   val_row_idx = poc_row_idx
+
+        while va_accum < va_target
+            float next_up   = vah_row_idx + 1 < effective_cnum ?
+                 array.get(buy_vols, vah_row_idx + 1) + array.get(sell_vols, vah_row_idx + 1) : 0.
+            float next_down = val_row_idx - 1 >= 0 ?
+                 array.get(buy_vols, val_row_idx - 1) + array.get(sell_vols, val_row_idx - 1) : 0.
+
+            bool can_up   = vah_row_idx + 1 < effective_cnum
+            bool can_down = val_row_idx  - 1 >= 0
+
+            if not can_up and not can_down
+                break
+            else if can_up and (not can_down or next_up >= next_down)
+                vah_row_idx += 1
+                va_accum    += next_up
+            else
+                val_row_idx -= 1
+                va_accum    += next_down
+
+        float vah_price = range_lo + step * vah_row_idx + step
+        float val_price = range_lo + step * val_row_idx
+
+        simple string resolved_va_style =
+             va_line_style_input == "Solid"  ? line.style_solid  :
+             va_line_style_input == "Dotted" ? line.style_dotted :
+             line.style_dashed
+
+        if show_va_lines
+            // VAH
+            if na(vah_line_obj)
+                vah_line_obj := line.new(earliest_start_bar, vah_price, cx_poc, vah_price,
+                     color=vah_color, width=va_line_width,
+                     style=resolved_va_style, xloc=xloc.bar_index)
+            else
+                line.set_xy1(vah_line_obj, earliest_start_bar, vah_price)
+                line.set_xy2(vah_line_obj, cx_poc,             vah_price)
+                line.set_color(vah_line_obj, vah_color)
+                line.set_width(vah_line_obj, va_line_width)
+                line.set_style(vah_line_obj, resolved_va_style)
+
+            // VAL
+            if na(val_line_obj)
+                val_line_obj := line.new(earliest_start_bar, val_price, cx_poc, val_price,
+                     color=val_color, width=va_line_width,
+                     style=resolved_va_style, xloc=xloc.bar_index)
+            else
+                line.set_xy1(val_line_obj, earliest_start_bar, val_price)
+                line.set_xy2(val_line_obj, cx_poc,             val_price)
+                line.set_color(val_line_obj, val_color)
+                line.set_width(val_line_obj, va_line_width)
+                line.set_style(val_line_obj, resolved_va_style)
+        else
+            if not na(vah_line_obj)
+                line.delete(vah_line_obj)
+                vah_line_obj := na
+            if not na(val_line_obj)
+                line.delete(val_line_obj)
+                val_line_obj := na

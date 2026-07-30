@@ -150,8 +150,34 @@ class FeatureExtractor(ASTVisitor):
         self.ctx.push_loop(node); self.generic_visit(node); self.ctx.pop_loop()
     def visit_WhileStatement(self, node):
         self.ctx.push_loop(node); self.generic_visit(node); self.ctx.pop_loop()
+    def visit_ForStatement(self, node):
+        self._detect_magic_number(node)
+        self.ctx.push_loop(node); self.generic_visit(node); self.ctx.pop_loop()
+
+    def visit_WhileStatement(self, node):
+        self._detect_magic_number(node)
+        self.ctx.push_loop(node); self.generic_visit(node); self.ctx.pop_loop()
+
     def visit_SwitchStatement(self, node):
         self.ctx.push_switch(node); self.generic_visit(node); self.ctx.pop_switch()
+
+    def _detect_unused_variable(self, node):
+        """Deteksi var yang dideklarasikan tapi tidak pernah di-assign ulang."""
+        if isinstance(node, VarDeclaration):
+            # Cek apakah var di-assign di tempat lain (sederhana: cek apakah nama muncul setelah deklarasi)
+            if node.name and not node.value:
+                # Cek apakah nama var muncul di assignment di bagian kode setelah deklarasi
+                rest_code = self.code.split(node.name, 1)
+                if len(rest_code) > 1:
+                    rest = rest_code[1]
+                    # Cek apakah ada assignment ke var ini (:=  atau =)
+                    import re
+                    if not re.search(rf'\b{node.name}\s*:=', rest) and not re.search(rf'\b{node.name}\s*=', rest):
+                        self._add_feature('state',
+                            f'var {node.name} dideklarasikan tapi tidak pernah di-assign — mungkin tidak terpakai',
+                            f'Hapus atau gunakan var {node.name}',
+                            'STATE', 'unused_variable_v1',
+                            anchor=node.span, diag_code='PINE0019')
 
     def visit_VarDeclaration(self, node):
         if node.value and isinstance(node.value, Identifier) and node.value.name == 'na':
@@ -160,6 +186,7 @@ class FeatureExtractor(ASTVisitor):
                 self._add_feature('state', f"var int {node.name} = na -> ubah ke 0",
                                   f"var int {node.name} = 0", 'STATE', 'var_int_na_v1',
                                   anchor=node.span, diag_code='PINE0001')
+        self._detect_unused_variable(node)
         self._collect_array_matrix_info(node)
         self.generic_visit(node)
 
@@ -197,6 +224,7 @@ class FeatureExtractor(ASTVisitor):
             self._check_request_security(node)
         # Detektor baru: box/line/linefill dalam if/loop
         self._detect_drawing_in_loop(node)
+        self._detect_rebuild_in_islast(node)
         self._collect_array_matrix_call(node)
         self.generic_visit(node)
 
@@ -215,6 +243,20 @@ class FeatureExtractor(ASTVisitor):
                     actual_val = val
                 if actual_val and 'lookahead_off' in actual_val:
                     has_valid = True
+            # Juga cek parameter gaps
+            has_gaps = False
+            for arg in node.args:
+                if isinstance(arg, Assignment) and isinstance(arg.target, Identifier) and arg.target.name == 'gaps':
+                    val = self.semantic.evaluate_constant(arg.value)
+                    actual_val = str(val.value) if hasattr(val, 'value') else str(val)
+                    if 'gaps_off' in actual_val:
+                        has_gaps = True
+            if not has_valid and not has_gaps:
+                self._add_feature('data_fetching',
+                    'request.security tanpa lookahead dan gaps — tambahkan gaps=barmerge.gaps_off',
+                    'request.security(..., gaps = barmerge.gaps_off)',
+                    'DATA_FETCHING', 'security_gaps_v1',
+                    anchor=node.span, diag_code='PINE0017')
         if not has_valid:
             self._add_feature('data_fetching', 'request.security tanpa lookahead_off -> tambahkan',
                               'request.security(..., lookahead = barmerge.lookahead_off)',
@@ -281,6 +323,25 @@ class FeatureExtractor(ASTVisitor):
                     'PLOTS', 'redundant_plot_v1',
                     anchor=node.span, diag_code='PINE0013')
 
+    def _detect_magic_number(self, node):
+        """Deteksi angka literal yang muncul di loop/condition tanpa konstanta (magic number)."""
+        from engine.parser import ForStatement, WhileStatement, IntegerLiteral, FloatLiteral
+        if isinstance(node, (ForStatement, WhileStatement)):
+            def check_magic(n):
+                if isinstance(n, (IntegerLiteral, FloatLiteral)):
+                    val = n.value
+                    if isinstance(val, int) and val not in (0, 1, -1, 2) and val > 3:
+                        self._add_feature('style',
+                            f'Magic number {val} terdeteksi di loop — gunakan konstanta bernama',
+                            f'const LENGTH = {val}',
+                            'STYLE', 'magic_number_v1',
+                            anchor=n.span, diag_code='PINE0016')
+                if hasattr(n, 'left'): check_magic(n.left)
+                if hasattr(n, 'right'): check_magic(n.right)
+                if hasattr(n, 'operand'): check_magic(n.operand)
+            if hasattr(node, 'iterable'):
+                check_magic(node.iterable)
+
     def _detect_lookahead_bias(self, node: Call):
         """Deteksi request.security dengan lookahead_on."""
         func_name = self._get_func_name(node.func)
@@ -314,6 +375,19 @@ class FeatureExtractor(ASTVisitor):
             self._add_feature('objects', msg, fix,
                 'OBJECTS', 'drawing_in_loop_v1',
                 anchor=node.span, diag_code='PINE0015')
+
+    def _detect_rebuild_in_islast(self, node):
+        """Deteksi penghancuran & pembuatan ulang objek di barstate.islast (anti-pattern)."""
+        if isinstance(node, Call):
+            func_name = self._get_func_name(node.func)
+            # Deteksi pola: .delete() atau .clear() — kemungkinan rebuild
+            if func_name and ('.delete' in func_name or '.clear' in func_name):
+                if self.ctx.in_if or self.ctx.in_loop:
+                    self._add_feature('memory',
+                        f'{func_name} di dalam if/loop — kemungkinan rebuild, gunakan var dan update saja',
+                        'var obj = ...; if condition obj.set_*(...)',
+                        'MEMORY', 'rebuild_in_islast_v1',
+                        anchor=node.span, diag_code='PINE0018')
 
     def _get_context(self) -> str:
         """Konteks saat ini: in_loop / in_if / in_function / is_indicator"""
