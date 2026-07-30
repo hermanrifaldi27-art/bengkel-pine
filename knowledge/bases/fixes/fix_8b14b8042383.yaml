@@ -1,0 +1,12 @@
+anchor: line 1061:1
+auto_fix_template: Gunakan series yang dinamis
+confidence: 0.2
+detector_id: redundant_plot_v1
+evidence_count: 2
+first_seen: '2026-07-31T02:48:50.433795'
+goal: plot dengan nilai literal statis -> tidak akan berubah, mungkin tidak diperlukan
+id: 8b14b8042383
+last_seen: '2026-07-31T02:48:50.497816'
+module: plots
+severity: WARNING
+tactic: Gunakan series yang dinamis

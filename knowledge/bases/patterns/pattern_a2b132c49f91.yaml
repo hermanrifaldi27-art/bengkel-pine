@@ -1,0 +1,10 @@
+auto_generated: true
+category: complexity
+confidence: 0.9
+description: File ini memiliki 9 masalah — pertimbangkan refactoring
+evidence_count: 9
+id: a2b132c49f91
+name: high_issue_density
+severity: WARNING
+source_files:
+- kioseff_market_structure.pine

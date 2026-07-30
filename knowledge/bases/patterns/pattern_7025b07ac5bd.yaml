@@ -1,0 +1,10 @@
+auto_generated: true
+category: priority
+confidence: 0.1
+description: Skor 63/100 — file ini perlu perbaikan prioritas tinggi
+evidence_count: 1
+id: 7025b07ac5bd
+name: low_score_alert
+severity: WARNING
+source_files:
+- kioseff_market_structure.pine

@@ -1,0 +1,12 @@
+anchor: line 82:3
+auto_fix_template: request.security(..., gaps = barmerge.gaps_off)
+confidence: 0.2
+detector_id: security_gaps_v1
+evidence_count: 2
+first_seen: '2026-07-31T02:48:50.427386'
+goal: request.security tanpa lookahead dan gaps — tambahkan gaps=barmerge.gaps_off
+id: 3745ba6f3e75
+last_seen: '2026-07-31T02:48:50.485753'
+module: data_fetching
+severity: ERROR
+tactic: request.security(..., gaps = barmerge.gaps_off)

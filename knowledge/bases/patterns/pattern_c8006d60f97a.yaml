@@ -1,0 +1,10 @@
+auto_generated: true
+category: quality
+confidence: 1.0
+description: File ini memiliki 12 best practice — kode berkualitas tinggi
+evidence_count: 12
+id: c8006d60f97a
+name: high_best_practice_count
+severity: INFO
+source_files:
+- kioseff_market_structure.pine

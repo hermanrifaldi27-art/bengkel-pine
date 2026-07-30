@@ -1,0 +1,12 @@
+anchor: line 300:10
+auto_fix_template: var x = new.new(...)
+confidence: 0.2
+detector_id: obj_in_if_v1
+evidence_count: 2
+first_seen: '2026-07-31T02:48:50.414091'
+goal: label.new di dalam if global -> gunakan var untuk deklarasi di luar
+id: 02622de2f2fd
+last_seen: '2026-07-31T02:48:50.463641'
+module: objects
+severity: INFO
+tactic: var x = new.new(...)
