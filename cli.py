@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-import sys, argparse, os
+import sys
+import argparse
+import os
 from engine.loader import RuleLoader
 from engine.matcher import RuleMatcher
 from engine.resolver import ParameterResolver
@@ -21,7 +23,7 @@ def main():
     p_repair.add_argument("file", help="File .pine yang akan diperbaiki")
     p_repair.add_argument("--error", help="Pesan error dari kompiler (opsional)")
     p_repair.add_argument("--dry-run", action="store_true", help="Tampilkan hasil tanpa menulis file")
-    p_repair.add_argument("--lint", action="store_true", help="Jalankan pine linter sebelum repair")
+    p_repair.add_argument("--no-lint", action="store_true", help="Nonaktifkan linter otomatis")
 
     p_extract = subparsers.add_parser("extract", help="Ekstrak pola dari file .pine ke YAML")
     p_extract.add_argument("file", help="File .pine yang akan diekstrak")
@@ -87,7 +89,8 @@ def main():
             print(f"❌ File tidak ditemukan: {file_path}")
             return
 
-        if getattr(args, "lint", False):
+        # 🔥 Linter otomatis (default ON, bisa dimatikan dengan --no-lint)
+        if not args.no_lint:
             from engine.pine_linter import lint_file
             report = lint_file(file_path)
             print(report.format())
@@ -96,7 +99,14 @@ def main():
             user_code = f.read()
 
         ast = PineAST(user_code)
-        context = {"symbols": ast.get_symbols(), "arrays": ast.get_arrays(), "matrices": ast.get_matrices(), "constants": ast.get_constants(), "functions": ast.functions, "ast": ast}
+        context = {
+            "symbols": ast.get_symbols(),
+            "arrays": ast.get_arrays(),
+            "matrices": ast.get_matrices(),
+            "constants": ast.get_constants(),
+            "functions": ast.functions,
+            "ast": ast,
+        }
         print(f"🔍 AST: arrays={ast.get_arrays()}, matrices={ast.get_matrices()}, constants={ast.get_constants()}")
 
         loader = RuleLoader()
@@ -109,6 +119,7 @@ def main():
 
         matcher = RuleMatcher(rules)
         error_text = args.error or ""
+
         if error_text:
             matched = matcher.match_by_error(error_text)
             if not matched:

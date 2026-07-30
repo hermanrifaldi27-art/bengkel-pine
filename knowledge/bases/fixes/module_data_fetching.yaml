@@ -1,0 +1,31 @@
+rules:
+  - id: data_fetching.request_security_lookahead_v1.f9178c0d
+    name: "request.security tanpa lookahead_off → tambahkan"
+    version: 1
+    priority: medium
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: analyzer
+        ast_patterns:
+          - node_type: request_security_call
+            not_contains: lookahead_off
+            context: DATA_FETCHING
+    preconditions: {}
+    parameters: []
+    action:
+      operation: inject_after
+      anchor: "request.security("
+      language: pine
+      template: "request.security(..., lookahead = barmerge.lookahead_off)"
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: false
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []
