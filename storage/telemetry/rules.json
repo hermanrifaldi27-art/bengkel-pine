@@ -30,8 +30,8 @@
     "failure_count": 0
   },
   "cleanup.matrix.remove_row": {
-    "usage_count": 10,
-    "success_count": 5,
+    "usage_count": 12,
+    "success_count": 7,
     "failure_count": 5
   }
 }

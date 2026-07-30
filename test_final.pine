@@ -1,0 +1,60 @@
+//@version=6
+//@description=Final Test Suite for PineAST v4.0.2
+indicator("Final Test", overlay=true)
+
+// Tipe dengan nested generic
+type BarData
+    array<matrix<float>> prices
+    map<string, int> meta
+
+// Enum
+enum Direction
+    UP
+    DOWN = "Turun"
+    SIDEWAYS
+
+// Method
+method calc(x) => x * 2
+
+// Variabel dengan tipe generik
+var array<float> closes = array.new<float>()
+var matrix<int> grid
+
+// Konstanta
+const PI = 3.14
+
+// Fungsi dengan parameter bertipe
+float add(float a, float b) => a + b
+
+// Arrow function
+f = (x, y) => x * y
+
+// Ternary
+x = true ? 1 : 0
+nested = a > b ? (c < d ? 1 : 2) : 3
+
+// If-else
+if close > open
+    label.new(bar_index, high, "Bull")
+else if close < open
+    label.new(bar_index, low, "Bear")
+else
+    label.new(bar_index, close, "Neutral")
+
+// For loop
+for i = 0 to 10 by 2
+    sum := sum + i
+
+// For-in
+for [k, v] in map
+    plot(v)
+
+// While
+while counter < MAX
+    counter := counter + 1
+
+// Switch
+switch direction
+    UP => plot(high)
+    DOWN => plot(low)
+    => plot(close)

@@ -1,6 +1,5 @@
 import yaml
 from pathlib import Path
-from engine.extractor import Feature
 
 class ContractWriter:
     BASE_PATH = Path("knowledge/bases/fixes")
