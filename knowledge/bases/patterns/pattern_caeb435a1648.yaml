@@ -1,0 +1,10 @@
+auto_generated: true
+category: complexity
+confidence: 0.4
+description: File ini memiliki 4 masalah — pertimbangkan refactoring
+evidence_count: 4
+id: caeb435a1648
+name: high_issue_density
+severity: WARNING
+source_files:
+- bigbeluga_liquidity_thermal.pine

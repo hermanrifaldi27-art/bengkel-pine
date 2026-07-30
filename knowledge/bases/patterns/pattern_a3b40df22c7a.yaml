@@ -1,0 +1,10 @@
+auto_generated: true
+category: render
+confidence: 0.5
+description: Terdeteksi 3 objek + 2 drawing — visual mungkin terlalu ramai
+evidence_count: 5
+id: a3b40df22c7a
+name: visual_complexity
+severity: INFO
+source_files:
+- bigbeluga_liquidity_thermal.pine
