@@ -2,11 +2,11 @@ anchor: line 66:5
 auto_fix_template: Hapus atau gunakan var txtSize
 confidence: 1.0
 detector_id: unused_variable_v1
-evidence_count: 30
+evidence_count: 51
 first_seen: '2026-07-31T02:48:50.430108'
 goal: var txtSize dideklarasikan tapi tidak pernah di-assign — mungkin tidak terpakai
 id: eb41b49653ed
-last_seen: '2026-07-31T02:58:42.371822'
+last_seen: '2026-07-31T04:48:35.312055'
 module: state
 severity: INFO
 tactic: Hapus atau gunakan var txtSize

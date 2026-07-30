@@ -2,11 +2,11 @@ anchor: line 659:5
 auto_fix_template: Hapus atau gunakan var chart
 confidence: 1.0
 detector_id: unused_variable_v1
-evidence_count: 30
+evidence_count: 51
 first_seen: '2026-07-31T02:48:50.406750'
 goal: var chart dideklarasikan tapi tidak pernah di-assign — mungkin tidak terpakai
 id: 8c2c4882c2b8
-last_seen: '2026-07-31T02:58:42.391798'
+last_seen: '2026-07-31T04:48:35.331932'
 module: state
 severity: INFO
 tactic: Hapus atau gunakan var chart

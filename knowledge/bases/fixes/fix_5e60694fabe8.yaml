@@ -2,12 +2,12 @@ anchor: line 350:1
 auto_fix_template: var obj = ...; if condition obj.set_*(...)
 confidence: 1.0
 detector_id: rebuild_in_islast_v1
-evidence_count: 30
+evidence_count: 51
 first_seen: '2026-07-31T02:48:50.432076'
 goal: profile.sumVol.clear di dalam if/loop — kemungkinan rebuild, gunakan var dan
   update saja
 id: 5e60694fabe8
-last_seen: '2026-07-31T02:58:42.395277'
+last_seen: '2026-07-31T04:48:35.308737'
 module: memory
 severity: WARNING
 tactic: var obj = ...; if condition obj.set_*(...)
