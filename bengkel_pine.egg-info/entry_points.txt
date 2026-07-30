@@ -1,0 +1,2 @@
+[console_scripts]
+bengkel-pine = cli:main

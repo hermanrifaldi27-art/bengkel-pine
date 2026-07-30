@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: bengkel-pine
+Version: 1.0.0
+Summary: Auto-repair engine untuk Pine Script v6
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: PyYAML>=6.0
+
+# bengkel-pine
+Rebuild from scratch — Wed Jul 29 23:45:21 WIB 2026

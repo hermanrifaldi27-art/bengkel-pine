@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "bengkel-pine"
+version = "1.0.0"
+description = "Auto-repair engine untuk Pine Script v6"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "PyYAML>=6.0",
+]
+
+[project.scripts]
+bengkel-pine = "cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["engine*", "cli.py"]
+exclude = ["backup_*", "kode_nyata", "uji_coba", "bengkel", "storage", "knowledge", "tests", "scripts", "backup_yaml_*"]

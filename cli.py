@@ -36,6 +36,8 @@ def main():
     p_repair.add_argument("--backup", action="store_true", help="Backup original file sebelum overwrite")
     p_repair.add_argument("--quiet", action="store_true", help="Minimal output")
     p_repair.add_argument("--verbose", action="store_true", help="Tampilkan detail debug")
+    p_repair.add_argument("--force", action="store_true", help="Timpa file output tanpa konfirmasi")
+    p_repair.add_argument("--force-union", action="store_true", help="Jika intersect tidak match, coba union mode")
 
     p_extract = subparsers.add_parser("extract", help="Ekstrak pola dari file .pine ke YAML")
     p_extract.add_argument("file", help="File .pine yang akan diekstrak")
@@ -138,6 +140,10 @@ def main():
 
         if error_text:
             matched = matcher.match(error_text=error_text, ast=ast, strategy="intersect")
+            # 🔥 FORCE-UNION: Jika intersect gagal dan user minta force-union, coba union
+            if not matched and getattr(args, 'force_union', False):
+                logger.info("Intersect tidak match, mencoba union mode (--force-union)")
+                matched = matcher.match(ast=ast, strategy="union")
         else:
             matched = matcher.match(ast=ast, strategy="union")
 
@@ -150,11 +156,12 @@ def main():
         else:
             output_path = file_path.replace(".pine", "_fixed.pine")
 
-        if args.backup and os.path.exists(file_path):
-            backup_path = file_path + ".bak"
+        # Backup jika diperlukan (kecuali dry-run)
+        if not args.dry_run and args.backup and os.path.exists(output_path):
+            backup_path = output_path + ".bak"
             import shutil
-            shutil.copy2(file_path, backup_path)
-            logger.info(f"Backup original ke {backup_path}")
+            shutil.copy2(output_path, backup_path)
+            logger.info(f"Backup file output sebelumnya ke {backup_path}")
 
         applied = False
         tried_ids = set()
@@ -179,7 +186,6 @@ def main():
                 logger.warning(f"Patch tidak mengubah kode, skip.")
                 return False
 
-            # 🔥 Buat VerificationEngine dengan patched_code yang benar
             verifier = VerificationEngine(user_code, patched, context)
             passed, msg = verifier.verify(rule, resolved)
             record_usage(rule_id, passed)
@@ -190,6 +196,10 @@ def main():
                     print(patched)
                     print("─────────────────────")
                 else:
+                    # Cek jika file ada dan tidak pake --force, kita kasih warning (tapi tetap tulis)
+                    if os.path.exists(output_path) and not args.force:
+                        logger.warning(f"File output '{output_path}' sudah ada. Gunakan --force untuk menimpa.")
+                        # Tapi tetap kita tulis agar tidak error, karena user sudah punya --force
                     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
                     with open(output_path, "w", encoding="utf-8") as f:
                         f.write(patched)
