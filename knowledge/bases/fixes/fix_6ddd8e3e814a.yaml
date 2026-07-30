@@ -1,12 +1,12 @@
 anchor: line 595:10
 auto_fix_template: var obj = box.new(...)
-confidence: 0.2
+confidence: 1.0
 detector_id: drawing_in_loop_v1
-evidence_count: 2
+evidence_count: 30
 first_seen: '2026-07-31T02:48:50.421479'
 goal: box.new di dalam if/loop -> gunakan var
 id: 6ddd8e3e814a
-last_seen: '2026-07-31T02:48:50.473924'
+last_seen: '2026-07-31T02:58:42.364721'
 module: objects
 severity: WARNING
 tactic: var obj = box.new(...)

@@ -89,6 +89,22 @@ class ProactiveKnowledgeBase:
                     pass
         return sorted(rules, key=lambda r: r.get('confidence', 0), reverse=True)
 
+    def get_confidence(self, finding: Any) -> float:
+        """Dapatkan confidence untuk suatu finding dari Knowledge Base."""
+        detector_id = getattr(finding, 'detector_id', 'unknown')
+        anchor = getattr(finding, 'anchor', 'unknown')
+        raw_id = f"{detector_id}:{anchor}"
+        rule_id = hashlib.md5(raw_id.encode()).hexdigest()[:12]
+        yaml_path = os.path.join(self.fixes_path, f"fix_{rule_id}.yaml")
+        if os.path.exists(yaml_path):
+            try:
+                with open(yaml_path, 'r') as f:
+                    data = yaml.safe_load(f)
+                return data.get('confidence', 0.0)
+            except Exception:
+                pass
+        return 0.0
+
     def get_fix_template(self, detector_id: str) -> Optional[str]:
         """Cari template perbaikan terbaik untuk detector_id."""
         best = None
