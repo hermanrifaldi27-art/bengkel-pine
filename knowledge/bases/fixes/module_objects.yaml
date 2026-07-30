@@ -1,6 +1,6 @@
 rules:
-- id: data_fetching.request_security_lookahead_v1.f9178c0d
-  name: request.security tanpa lookahead_off -> tambahkan
+- id: objects.obj_in_if_v1.aee27dfd
+  name: table.new di dalam if global -> gunakan var untuk deklarasi di luar
   version: 1
   priority: medium
   compatibility:
@@ -11,15 +11,15 @@ rules:
   - type: analyzer
     ast_patterns:
     - node_type: pattern_match
-      context: DATA_FETCHING
-      signature: f9178c0d
+      context: OBJECTS
+      signature: aee27dfd
   preconditions: {}
   parameters: []
   action:
     operation: inject_after
-    anchor: line 65:31
+    anchor: line 276:9
     language: pine
-    template: request.security(..., lookahead = barmerge.lookahead_off)
+    template: "var new_var = new.new(...)\nif condition\n    new_var := new.new(...)"
   safety:
     reversible: true
     backup_required: true
@@ -29,7 +29,7 @@ rules:
       must_pass: true
   fallbacks: []
   dependencies: []
-  signature: f9178c0d
+  signature: aee27dfd
   source:
     extractor_version: v2.1
-    detector_id: request_security_lookahead_v1
+    detector_id: obj_in_if_v1

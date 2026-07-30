@@ -164,13 +164,20 @@ class FeatureExtractor(ASTVisitor):
 
     def visit_Call(self, node):
         func_name = self._get_func_name(node.func)
-        if self.ctx.in_if and not self.ctx.in_function and func_name:
+        if self.ctx.in_if and not self.ctx.in_function and not self.ctx.in_loop and func_name:
+            # Fungsi plotting TIDAK BOLEH di dalam if -> HARUS pindah ke global scope
             plot_names = {'plot', 'plotshape', 'plotchar', 'plotarrow', 'plotcandle', 'plotbar',
-                          'hline', 'fill', 'line.new', 'box.new', 'label.new', 'table.new'}
+                          'hline', 'fill', 'bgcolor', 'barcolor'}
+            # Fungsi objek visual BOLEH di dalam if tapi HARUS pakai var x = na di luar
+            obj_names = {'line.new', 'box.new', 'label.new', 'table.new', 'polyline.new'}
             if func_name in plot_names:
                 self._add_feature('plots', f'{func_name} di dalam if global -> pindahkan ke global scope',
                                   f'{func_name}(cond ? expr : na)', 'PLOTS', 'plot_in_if_v1',
                                   anchor=node.span, diag_code='PINE0003')
+            elif func_name in obj_names:
+                self._add_feature('objects', f'{func_name} di dalam if global -> gunakan var untuk deklarasi di luar',
+                                  f'var x = {func_name.split(".")[-1]}.new(...)', 'OBJECTS', 'obj_in_if_v1',
+                                  anchor=node.span, diag_code='PINE0008')
             elif func_name == 'alertcondition':
                 self._add_feature('alert', 'alertcondition di dalam if global -> pindahkan',
                                   'alertcondition(cond, title, message)', 'ALERT', 'alertcondition_in_if_v1',
