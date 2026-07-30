@@ -62,6 +62,10 @@ def build_context(ast: ASTNode, code: str) -> AuditContext:
     func_count = sum(1 for n in all_nodes if isinstance(n, FunctionDeclaration))
     var_count = sum(1 for n in all_nodes if isinstance(n, VarDeclaration))
     switch_count = sum(1 for n in all_nodes if isinstance(n, SwitchStatement))
+    methods_count = sum(1 for n in all_nodes if isinstance(n, MethodDeclaration))
+    func_count = sum(1 for n in all_nodes if isinstance(n, FunctionDeclaration))
+    var_count = sum(1 for n in all_nodes if isinstance(n, VarDeclaration))
+    switch_count = sum(1 for n in all_nodes if isinstance(n, SwitchStatement))
 
     # Global var count: hanya dari Module.body langsung
     global_var_count = 0
@@ -93,7 +97,7 @@ def build_context(ast: ASTNode, code: str) -> AuditContext:
         bars_back_limit=bool(re.search(r'\bmax_bars_back\s*=', clean)),
         cached_sec=bool(re.search(r'\bvar\b', clean) and 'request.security' in call_names),
         step_loop=bool(re.search(r'\bfor\b', clean) and re.search(r'\bby\b', clean)),
-        force_overlay=bool(re.search(r'\bforce_overlay\s*=\s*true\b', clean)),
+        force_overlay=bool(re.search(r'\b(force_overlay|overlay)\s*=\s*true\b', clean)),
         hidden_plot=bool(re.search(r'\bdisplay\s*=\s*display\.none\b', clean)),
         inline_inputs=bool(re.search(r'\binline\s*=', clean)),
         transparency=bool(re.search(r'\bcolor\.new\(', clean)),

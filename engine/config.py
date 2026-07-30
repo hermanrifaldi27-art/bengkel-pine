@@ -69,7 +69,7 @@ DISCLAIMER = "Skor menilai kualitas penulisan kode, BUKAN jaminan keuntungan tra
 # ── Audit ──
 VALID_AUDIT_CATEGORIES = {'reliability', 'memory', 'performance', 'render', 'debug',
                           'scope', 'type_safety', 'ux', 'readability', 'code_structure',
-                          'complexity', 'security', 'architecture', 'maintainability'}
+                          'complexity', 'security', 'architecture', 'maintainability', 'dependency'}
 REPORT_WIDTH = 58
 MAX_POINTS_PER_CATEGORY = {
     'reliability': 25, 'memory': 20, 'performance': 15,

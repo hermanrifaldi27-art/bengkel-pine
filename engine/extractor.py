@@ -195,6 +195,8 @@ class FeatureExtractor(ASTVisitor):
                                   anchor=node.span, diag_code='PINE0004')
         if func_name == 'request.security':
             self._check_request_security(node)
+        # Detektor baru: box/line/linefill dalam if/loop
+        self._detect_drawing_in_loop(node)
         self._collect_array_matrix_call(node)
         self.generic_visit(node)
 
@@ -301,6 +303,17 @@ class FeatureExtractor(ASTVisitor):
             # Sederhana: cek apakah nama var muncul di assignment di kode
             if node.name not in self.code:
                 pass  # Tidak bisa deteksi tanpa analisis lebih dalam
+
+    def _detect_drawing_in_loop(self, node: Call):
+        """Deteksi box.new/line.new/linefill.new di dalam if/loop."""
+        func_name = self._get_func_name(node.func)
+        drawing_funcs = {'box.new', 'line.new', 'linefill.new'}
+        if func_name in drawing_funcs and (self.ctx.in_if or self.ctx.in_loop):
+            msg = func_name + ' di dalam if/loop -> gunakan var'
+            fix = 'var obj = ' + func_name + '(...)'
+            self._add_feature('objects', msg, fix,
+                'OBJECTS', 'drawing_in_loop_v1',
+                anchor=node.span, diag_code='PINE0015')
 
     def _get_context(self) -> str:
         """Konteks saat ini: in_loop / in_if / in_function / is_indicator"""
