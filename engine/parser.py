@@ -2,39 +2,58 @@ import re
 from typing import Dict, List, Any
 
 class PineAST:
-    """Representasi AST sederhana untuk Pine Script"""
     def __init__(self, code: str):
         self.code = code
-        self.symbols = {}   # nama → tipe (var, array, matrix, const)
-        self.arrays = []
-        self.matrices = []
-        self.constants = {}
-        self.functions = []
+        self.symbols: Dict[str, str] = {}
+        self.arrays: List[str] = []
+        self.matrices: List[str] = []
+        self.constants: Dict[str, int] = {}
+        self.functions: List[str] = []
         self._parse()
     
     def _parse(self):
-        # Ekstrak var array/matrix
-        for match in re.finditer(r'var\s+(\w+)\s*=\s*array\.new', self.code):
-            self.symbols[match.group(1)] = "array"
-            self.arrays.append(match.group(1))
-        for match in re.finditer(r'var\s+(\w+)\s*=\s*matrix\.new', self.code):
-            self.symbols[match.group(1)] = "matrix"
-            self.matrices.append(match.group(1))
-        # Ekstrak konstanta
-        for match in re.finditer(r'(?:const\s+)?([A-Z][A-Z0-9_]*)\s*=\s*(\d+)', self.code):
-            self.constants[match.group(1)] = int(match.group(2))
-        # Ekstrak fungsi
-        for match in re.finditer(r'(\w+)\s*\([^)]*\)\s*=>', self.code):
+        patterns_array = [
+            r'var\s+(?:\w+\s+)?(\w+)\s*=\s*array\.new',
+            r'var\s+array(?:<\w+>)?\s+(\w+)\s*=',
+            r'(\w+)\s*=\s*array\.new(?:<\w+>)?\s*\(',
+        ]
+        for pat in patterns_array:
+            for match in re.finditer(pat, self.code):
+                name = match.group(1)
+                if name not in self.arrays:
+                    self.symbols[name] = "array"
+                    self.arrays.append(name)
+        
+        patterns_matrix = [
+            r'var\s+(?:\w+\s+)?(\w+)\s*=\s*matrix\.new',
+            r'var\s+matrix(?:<\w+>)?\s+(\w+)\s*=',
+            r'(\w+)\s*=\s*matrix\.new(?:<\w+>)?\s*\(',
+        ]
+        for pat in patterns_matrix:
+            for match in re.finditer(pat, self.code):
+                name = match.group(1)
+                if name not in self.matrices:
+                    self.symbols[name] = "matrix"
+                    self.matrices.append(name)
+        
+        for match in re.finditer(r'(?:const\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(\d+)\b', self.code):
+            name = match.group(1)
+            if name not in self.symbols:
+                self.constants[name] = int(match.group(2))
+                if name.isupper() or any(k in name.lower() for k in ['max', 'limit', 'memory', 'depth', 'size']):
+                    self.symbols[name] = "const"
+        
+        for match in re.finditer(r'(?:method\s+)?(\w+)\s*\([^)]*\)\s*=>', self.code):
             self.functions.append(match.group(1))
     
-    def get_symbols(self):
+    def get_symbols(self) -> Dict[str, str]:
         return self.symbols
     
-    def get_constants(self):
+    def get_constants(self) -> Dict[str, int]:
         return self.constants
     
-    def get_arrays(self):
+    def get_arrays(self) -> List[str]:
         return self.arrays
     
-    def get_matrices(self):
+    def get_matrices(self) -> List[str]:
         return self.matrices
