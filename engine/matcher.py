@@ -37,43 +37,32 @@ class RuleMatcher:
                     continue
                 patterns = t.get('ast_patterns', [])
                 for p in patterns:
-                    if self._pattern_matches(p, ast, code):
+                    if self._pattern_matches(p, code):
                         matched.append(rule)
                         break
                 if rule in matched:
                     break
         return matched
 
-    def _pattern_matches(self, pattern: Dict, ast, code: str) -> bool:
+    def _pattern_matches(self, pattern: Dict, code: str) -> bool:
         node_type = pattern.get('node_type', '')
         context = pattern.get('context', '')
         contains = pattern.get('contains', '')
         not_contains = pattern.get('not_contains', '')
-        signature = pattern.get('signature', '')
-        
+        # Cek contains / not_contains
         if contains and contains not in code:
             return False
         if not_contains and not_contains in code:
             return False
-        
-        if node_type == 'var_declaration' and context == 'STATE':
-            if 'var int' in code and '= na' in code:
-                return True
-            return False
-        if node_type == 'function_definition' and context == 'FUNCTIONS':
-            if re.search(r'(?:method\s+)?\w+\s*\([^)]*\)\s*=>\s*\{.*?return', code, re.DOTALL):
-                return True
-            return False
-        if node_type == 'plot_call' and context == 'PLOTS':
-            if re.search(r'if\s+[^:\n]*:\s*\n\s*plot\s*\(', code):
-                return True
-            return False
-        if node_type == 'matrix_new_call':
-            if re.search(r'matrix\.new', code):
-                return True
-            return False
-        if node_type == 'for_loop':
-            if re.search(r'\bfor\s+', code):
-                return True
-            return False
+        # Node type spesifik
+        if node_type == 'comparison' and 'array.size' in code and 'array.push' in code:
+            return True
+        if node_type == 'var_declaration' and context == 'STATE' and 'var int' in code and '= na' in code:
+            return True
+        if node_type == 'function_definition' and context == 'FUNCTIONS' and 'return' in code:
+            return True
+        if node_type == 'plot_call' and context == 'PLOTS' and re.search(r'if\s+[^:\n]*:\s*\n\s*plot\s*\(', code):
+            return True
+        if node_type == 'matrix_new_call' and 'matrix.new' in code and 'matrix.add_row' in code:
+            return True
         return False

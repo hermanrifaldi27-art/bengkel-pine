@@ -22,6 +22,7 @@ class PatchExecutor:
         elif operation == 'inject_after':
             return self._inject_after(anchor, template)
         elif operation == 'replace_pattern':
+            return self._move_to_global(template)
             return self._replace_pattern(anchor, template)
         elif operation == 'replace':
             if '{' in template and '}' in template:
@@ -62,3 +63,39 @@ class PatchExecutor:
 
     def _replace(self, template: str) -> str:
         return template
+    def _move_to_global(self, template: str) -> str:
+        """Pindahkan kode ke global scope (LEVEL 13)"""
+        # Implementasi sederhana: inject ke akhir file di global scope
+        return self.code + '\n' + template
+    def _move_to_global(self, template: str) -> str:
+        """Pindahkan kode ke global scope (LEVEL 13)"""
+        return self.code + '\n' + template
+
+    def _wrap_with(self, keyword: str, template: str) -> str:
+        """Bungkus kode dengan if / for / while"""
+        lines = self.code.splitlines(keepends=True)
+        # Cari baris pertama yang mengandung anchor
+        for i, line in enumerate(lines):
+            if keyword in line:
+                indent = re.match(r'^(\s*)', line).group(1) if line.strip() else ''
+                # Inject template di atas dan di bawah
+                new_lines = lines[:i]
+                new_lines.append(indent + template + '\n')
+                new_lines.append(line)
+                new_lines.append(indent + '    ' + line.strip() + '\n')  # duplicate
+                # ... ini hanya contoh, kita implementasi penuh nanti
+                return ''.join(new_lines)
+        return self.code
+
+    def _add_prefix(self, prefix: str, template: str) -> str:
+        """Tambahkan prefix ke baris yang mengandung anchor"""
+        lines = self.code.splitlines(keepends=True)
+        new_lines = []
+        for line in lines:
+            if prefix in line:
+                # Cari anchor dan tambahkan prefix di depannya
+                anchor = prefix  # seharusnya ada parameter terpisah
+                new_lines.append(line.replace(anchor, template + anchor))
+            else:
+                new_lines.append(line)
+        return ''.join(new_lines)

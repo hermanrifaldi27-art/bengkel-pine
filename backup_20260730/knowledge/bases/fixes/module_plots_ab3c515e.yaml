@@ -1,0 +1,36 @@
+rule:
+  id: plots.gradient_ast_v1.ab3c515e
+  name: Warna gradien
+  version: 1
+  priority: medium
+  compatibility:
+    pine:
+      min: 5
+      max: 6
+  triggers:
+  - type: analyzer
+    ast_patterns:
+    - node_type: pattern_match
+      context: PLOTS
+      signature: ab3c515e
+  preconditions: {}
+  parameters: []
+  action:
+    operation: inject_after
+    anchor: TODO
+    language: pine
+    template: color.from_gradient(norm, 0, 10, upColAdv, upColAdv2)
+    safety:
+      reversible: true
+      backup_required: true
+      modifies_existing_logic: false
+  verification:
+    compiler:
+      must_pass: true
+  fallbacks: []
+  dependencies: []
+  signature: ab3c515e
+  source:
+    extractor_version: v2.1
+    detector_id: gradient_ast_v1
+    timestamp: null

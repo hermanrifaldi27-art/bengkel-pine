@@ -1,96 +1,72 @@
-#!/usr/bin/env python3
-import os
-import yaml
+from __future__ import annotations
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
+import yaml
+from engine.schema import Rule, validate_and_report
 
 class RuleLoader:
-    """Loader untuk knowledge base YAML v6.0 — mendukung format rules: [...]"""
-    
-    REQUIRED_FIELDS = ['id', 'name', 'priority', 'triggers', 'action', 'verification']
-    
-    
-    def __init__(self, base_path: str = "knowledge/bases/fixes"):
+    def __init__(self, base_path: str = "knowledge/bases/fixes", strict: bool = False):
         self.base_path = Path(base_path)
+        self.strict = strict
         self.rules: List[Dict[str, Any]] = []
+        self.validated_rules: List[Rule] = []
         self.errors: List[str] = []
-    
+        self.warnings: List[str] = []
     def load_all(self) -> List[Dict[str, Any]]:
-        """Muat semua file YAML di direktori fixes"""
         self.rules = []
+        self.validated_rules = []
         self.errors = []
-        
+        self.warnings = []
         if not self.base_path.exists():
             self.errors.append(f"❌ Direktori tidak ditemukan: {self.base_path}")
             return []
-        
-        yaml_files = list(self.base_path.glob("module_*.yaml"))
+        yaml_files = sorted(self.base_path.glob("module_*.yaml"))
         if not yaml_files:
-            self.errors.append(f"⚠️ Tidak ada file YAML di {self.base_path}")
+            self.errors.append("⚠️ Tidak ada file YAML")
             return []
-        
         for yaml_file in yaml_files:
-            try:
-                with open(yaml_file, 'r') as f:
-                    data = yaml.safe_load(f)
-                
-                if data is None:
-                    continue
-                
-                # Jika ada key 'rules', ambil daftarnya
-                if 'rules' in data and isinstance(data['rules'], list):
-                    for rule in data['rules']:
-                        if self._validate_rule(rule, yaml_file.name):
-                            self.rules.append(rule)
-                else:
-                    # Fallback: anggap data itu sendiri adalah satu rule
-                    if self._validate_rule(data, yaml_file.name):
-                        self.rules.append(data)
-                        
-            except yaml.YAMLError as e:
-                self.errors.append(f"❌ YAML Error di {yaml_file.name}: {e}")
-            except Exception as e:
-                self.errors.append(f"❌ Error membaca {yaml_file.name}: {e}")
-        
+            self._load_file(yaml_file)
         return self.rules
-    
-    def _validate_rule(self, rule: Dict, filename: str) -> bool:
-        """Validasi minimal rule sesuai schema v6.0"""
-        missing = [f for f in self.REQUIRED_FIELDS if f not in rule]
-        if missing:
-            self.errors.append(f"⚠️ {filename}: Field wajib hilang: {missing}")
-            return False
-        
-        # Validasi priority enum
-        priority = rule.get('priority')
-        valid_priorities = ['required', 'high', 'medium', 'low', 'optional']
-        if priority not in valid_priorities:
-            self.errors.append(f"⚠️ {filename}: priority '{priority}' tidak valid. Gunakan: {valid_priorities}")
-            return False
-        
-        # Validasi triggers minimal 1
-        if not rule.get('triggers'):
-            self.errors.append(f"⚠️ {filename}: minimal 1 trigger")
-            return False
-        
-        return True
-    
+    def _load_file(self, yaml_file: Path):
+        try:
+            with open(yaml_file, "r", encoding="utf-8") as f:
+                data = yaml.safe_load(f)
+        except Exception as e:
+            self.errors.append(f"❌ Error {yaml_file.name}: {e}")
+            return
+        if data is None:
+            return
+        valid_models, report_errors = validate_and_report(data, filename=yaml_file.name)
+        self.errors.extend(report_errors)
+        for model in valid_models:
+            if self.strict and not model.is_actionable():
+                self.warnings.append(f"⏩ skip non-actionable: {model.id}")
+                continue
+            as_dict = {
+                "id": model.id,
+                "name": model.name,
+                "version": model.version,
+                "priority": model.priority.value,
+                "compatibility": {"pine": {"min": model.compatibility.pine.min, "max": model.compatibility.pine.max}},
+                "triggers": [{"type": t.type.value, "error_signals": t.error_signals, "ast_patterns": [{"node_type": p.node_type, "context": p.context, "contains": p.contains, "not_contains": p.not_contains} for p in t.ast_patterns] if t.ast_patterns else []} for t in model.triggers],
+                "action": {"operation": model.action.operation.value, "anchor": model.action.anchor, "template": model.action.template, "target_module": model.action.target_module},
+                "verification": {"compiler": model.verification.compiler, "post_condition": {"function": model.verification.post_condition.function, "variable": model.verification.post_condition.variable, "operator": model.verification.post_condition.operator, "value": model.verification.post_condition.value} if model.verification.post_condition else None},
+                "parameters": [{"name": p.name, "type": p.type, "source": p.source, "required": p.required, "default": p.default} for p in model.parameters],
+                "fallbacks": [{"id": f.id} for f in model.fallbacks],
+                "dependencies": model.dependencies,
+                "signature": model.signature,
+            }
+            self.rules.append(as_dict)
+            self.validated_rules.append(model)
     def get_by_id(self, rule_id: str) -> Optional[Dict]:
         for rule in self.rules:
-            if rule.get('id') == rule_id:
+            if rule.get("id") == rule_id:
                 return rule
         return None
-    
     def get_errors(self) -> List[str]:
         return self.errors
-
-if __name__ == "__main__":
-    loader = RuleLoader()
-    rules = loader.load_all()
-    print(f"📊 Loaded {len(rules)} rules")
-    for err in loader.get_errors():
-        print(err)
-    if rules:
-        for r in rules[:3]:
-            print(f"  - {r.get('id')} ({r.get('priority')})")
-    OPTIONAL_FIELDS = ["parameters"]
+    def get_warnings(self) -> List[str]:
+        return self.warnings
+    def summary(self) -> str:
+        actionable = sum(1 for r in self.validated_rules if r.is_actionable())
+        return f"Loaded {len(self.rules)} rules ({actionable} actionable, {len(self.errors)} issues)"

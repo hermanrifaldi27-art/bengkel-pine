@@ -1,0 +1,35 @@
+rules:
+  - id: state.fix_int_na
+    name: "Ubah inisialisasi var int = na menjadi = 0"
+    version: 1
+    priority: required
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: compiler
+        error_signals:
+          - "Value with NA type cannot be assigned to a variable that was defined without type keyword"
+      - type: analyzer
+        ast_patterns:
+          - node_type: var_declaration
+            context: STATE
+            contains: "int"
+            contains: "= na"
+    preconditions: {}
+    parameters: []
+    action:
+      operation: replace_pattern
+      anchor: "= na"
+      language: pine
+      template: "= 0"
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: true
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []

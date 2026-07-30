@@ -1,0 +1,116 @@
+rule:
+  id: functions.switch_inline_v1.767df1d9
+  name: Switch statement (inline)
+  version: 1
+  priority: medium
+  compatibility:
+    pine:
+      min: 5
+      max: 6
+  triggers:
+  - type: analyzer
+    ast_patterns:
+    - node_type: pattern_match
+      context: FUNCTIONS
+      signature: 767df1d9
+  preconditions: {}
+  parameters: []
+  action:
+    operation: inject_after
+    anchor: TODO
+    language: pine
+    template: "switch gran\n\n    granularity.m1  => \"1\"\n    granularity.s1  =>\
+      \ \"1S\"\n    granularity.t1  => \"1T\"\n\n\ndirection() => \n\n    if gran\
+      \ == granularity.t1\n\n        switch \n\n            close == bid => -1 \n\
+      \            close == ask =>  1\n            =>               math.sign(close\
+      \ - close[1]) \n        \n    else \n\n        math.sign(close - close[1])\n\
+      \neveryBarVP() => \n\n    [h, l, vol] = request.security_lower_tf(\"\", tf,\
+      \ [high, low, volume * direction()])\n\n    if vol.size() > 0 \n\n        Range\
+      \ = (high - low) / (rows - 1)\n\n        levelsArr  = array.new<float>(rows,\
+      \ 0)\n        vpArr      = array.new<float>(rows, 0)\n        deltaArr   = array.new<float>(rows,\
+      \ 0)\n\n        for i = 0 to rows - 1\n\n            levelsArr.set(i, low +\
+      \ (Range * i))\n\n        for [i, data] in vol \n\n            bot = levelsArr.binary_search_leftmost(l.get(i))\n\
+      \            top = levelsArr.binary_search_leftmost(h.get(i))\n\n          \
+      \  div    = data / (math.abs(top - bot) + 1) \n            absDiv = math.abs(div)\
+      \ \n\n            for x = bot to top \n\n                vpArr   .set(x, vpArr.get(x)\
+      \ + absDiv)\n                deltaArr.set(x, deltaArr.get(x) + div)\n\n    \
+      \    poc   = vpArr.indexof(vpArr.max()), \n        indUp = poc, indDn = poc,\
+      \ sum = 0., size = vpArr.size()\n        total = vpArr.sum() * .7\n\n      \
+      \  for i = 0 to size - 1\n\n            if indUp == indDn \n\n             \
+      \   sum += vpArr.get(indUp)\n\n                if sum >= total \n          \
+      \          break \n\n                indUp += 1 \n                indDn -= 1\n\
+      \                continue \n\n            if indUp < size \n\n             \
+      \   sum += vpArr.get(indUp)\n\n                if sum >= total \n          \
+      \          break \n\n                indUp += 1\n\n            if indDn > -1\
+      \ \n\n                sum += vpArr.get(indDn)\n\n                if sum >= total\
+      \ \n                    break \n\n                indDn -= 1\n\n    \n     \
+      \   if vpArr.sum() != 0\n\n            minVol = vpArr.min(), rangeVol = vpArr.range()\n\
+      \n            absDeltaArr = deltaArr   .abs()\n            minDelta    = absDeltaArr.min()\
+      \ \n            rangeDelta  = absDeltaArr.range()\n\n            for [i, data]\
+      \ in vpArr \n\n                norm = int(na), getDelta = deltaArr.get(i), absDelta\
+      \ = absDeltaArr.get(i)\n                \n                if profType == \"\
+      VP\"\n\n                    norm := math.round(1 + ((data - minVol) * 10) /\
+      \ rangeVol)\n\n                else \n\n                    norm := math.round(1\
+      \ + ((absDelta - minDelta) * 10) / rangeDelta)\n\n                    if math.sign(getDelta)\
+      \ == -1 \n\n                        norm *= -1\n\n                level = levelsArr.get(i)\n\
+      \                getText = \"\u2588\"\n\n                signNorm = math.sign(norm)\n\
+      \n                if signNorm == 1 or profType == \"VP\"\n\n               \
+      \     if norm > 1 \n                        for x = 0 to math.min(norm - 1,\
+      \ 9)\n                            getText += \"\u2588\"\n\n                \
+      \    if str.length(getText) < 10 \n\n                        for x = str.length(getText)\
+      \ to 10 \n                            getText += \" \"\n\n                 \
+      \   else if str.length(getText) == 10 \n\n                        getText +=\
+      \ \" \"\n\n                else \n\n                    getText := \"\"\n\n\
+      \                    width  = 11\n                    blocks = math.min(math.abs(norm),\
+      \ width)\n                    spaces = width - blocks\n\n                  \
+      \  if spaces > 0\n                        for x = 0 to spaces - 1\n        \
+      \                    getText += \" \"\n\n                    if blocks > 0\n\
+      \                        for x = 0 to blocks - 1\n                         \
+      \   getText += \"\u2588\"\n\n                    \n                    volAtLevel\
+      \ = str.tostring(getDelta, format.volume)\n\n                    if showVolAtLevel\n\
+      \                         \n                        getText := volAtLevel +\
+      \ getText\n\n                col = switch math.sign(close - open) \n\n     \
+      \               1  => color.new(color.from_gradient(norm, 0, 10, upColAdv, upColAdv2),\
+      \ miniProfTransp)\n                    -1 => color.new(color.from_gradient(norm,\
+      \ 0, 10, dnColAdv, dnColAdv2), miniProfTransp)\n\n                if showVolAtLevel\
+      \ \n\n                    if profType == \"VP\" or signNorm == 1    \n\n   \
+      \                     getText += switch \n\n                            profType\
+      \ == \"VP\" => str.tostring(data, format.volume) \n                        \
+      \    => str.tostring(getDelta, format.volume) \n\n                if showVA\
+      \ \n                    \n                    if i <= indDn or i >= indUp \n\
+      \n                        col := color.new(color.gray, miniProfTransp)\n\n \
+      \               if customPOCcol\n                    if i == poc \n        \
+      \                col := pocCol\n\n                if profType == \"VP\" or signNorm\
+      \ == 1\n\n                    box.new(bar_index, level, bar_index + 1, level\
+      \ + Range, text = getText, \n                                              \
+      \              text_halign   = text.align_left, \n                         \
+      \                                   text_valign   = text.align_center, \n  \
+      \                                                          border_color  = color(na),\
+      \ \n                                                            bgcolor    \
+      \   = #00000000, \n                                                        \
+      \    text_color    = col,\n                                                \
+      \            force_overlay = true \n                                       \
+      \                     )\n\n                else \n\n                    box.new(bar_index\
+      \ - 1, level, bar_index, level + Range, text = getText, \n                 \
+      \                                           text_halign   = text.align_right,\
+      \ \n                                                            text_valign\
+      \   = text.align_center, \n                                                \
+      \            border_color  = color(na), \n                                 \
+      \                           bgcolor       = #00000000, \n                  \
+      \                                          text_color    = col,\n          \
+      \                                                  force_overlay = true \n \
+      \                                                           )\n\n\neveryBarVP()\n"
+    safety:
+      reversible: true
+      backup_required: true
+      modifies_existing_logic: false
+  verification:
+    compiler:
+      must_pass: true
+  fallbacks: []
+  dependencies: []
+  signature: 767df1d9
+  source:
+    extractor_version: v2.1
+    detector_id: switch_inline_v1
+    timestamp: null

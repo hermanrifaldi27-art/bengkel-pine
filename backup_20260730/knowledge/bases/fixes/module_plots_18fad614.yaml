@@ -1,0 +1,36 @@
+rule:
+  id: plots.gradient_ast_v1.18fad614
+  name: Warna gradien
+  version: 1
+  priority: medium
+  compatibility:
+    pine:
+      min: 5
+      max: 6
+  triggers:
+  - type: analyzer
+    ast_patterns:
+    - node_type: pattern_match
+      context: PLOTS
+      signature: 18fad614
+  preconditions: {}
+  parameters: []
+  action:
+    operation: inject_after
+    anchor: TODO
+    language: pine
+    template: color.from_gradient(mlRSI, 28, 72, rsiBear, rsiBull)
+    safety:
+      reversible: true
+      backup_required: true
+      modifies_existing_logic: false
+  verification:
+    compiler:
+      must_pass: true
+  fallbacks: []
+  dependencies: []
+  signature: 18fad614
+  source:
+    extractor_version: v2.1
+    detector_id: gradient_ast_v1
+    timestamp: null
