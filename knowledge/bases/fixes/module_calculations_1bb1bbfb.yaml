@@ -1,0 +1,36 @@
+rule:
+  id: calculations.math_ops_v1.1bb1bbfb
+  name: Math operation
+  version: 1
+  priority: medium
+  compatibility:
+    pine:
+      min: 5
+      max: 6
+  triggers:
+  - type: analyzer
+    ast_patterns:
+    - node_type: pattern_match
+      context: CALCULATIONS
+      signature: 1bb1bbfb
+  preconditions: {}
+  parameters: []
+  action:
+    operation: inject_after
+    anchor: TODO
+    language: pine
+    template: math.max(upBand, stLong[1])
+    safety:
+      reversible: true
+      backup_required: true
+      modifies_existing_logic: false
+  verification:
+    compiler:
+      must_pass: true
+  fallbacks: []
+  dependencies: []
+  signature: 1bb1bbfb
+  source:
+    extractor_version: v2.1
+    detector_id: math_ops_v1
+    timestamp: null

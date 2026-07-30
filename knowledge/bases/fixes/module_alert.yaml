@@ -1,0 +1,33 @@
+rules:
+  - id: alert.alertcondition_in_if
+    name: "Pindahkan alertcondition dari dalam if ke global scope"
+    version: 1
+    priority: required
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: analyzer
+        ast_patterns:
+          - node_type: alertcondition_call
+            parent_scope: if
+    preconditions: {}
+    parameters:
+      - name: alert_code
+        type: string
+        source: ast_identifier
+    action:
+      operation: move_to_global
+      anchor: alertcondition
+      language: pine
+      template: "{alert_code}"
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: false
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []

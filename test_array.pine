@@ -1,0 +1,6 @@
+//@version=6
+indicator("Test Array")
+var myArray = array.new<float>()
+for i = 1 to 150
+    array.push(myArray, close)
+plot(array.size(myArray))

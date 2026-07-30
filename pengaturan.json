@@ -1,0 +1,12 @@
+{
+  "engine": {
+    "timeout_ms": 50,
+    "retry_count": 0,
+    "max_rules_per_execution": 10,
+    "enable_telemetry": true
+  },
+  "logging": {
+    "level": "info",
+    "file": "storage/logs/engine.log"
+  }
+}

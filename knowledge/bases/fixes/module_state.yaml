@@ -1,0 +1,167 @@
+rules:
+  - id: state.persistent_array
+    name: "Array persisten di STATE harus pakai var"
+    version: 1
+    priority: required
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: analyzer
+        ast_patterns:
+          - node_type: array_new_call
+            context: STATE
+            not_contains: var
+    preconditions:
+      persistence:
+        must_be_var: false
+      type_check:
+        must_be: array
+    parameters:
+      - name: var
+        type: string
+        source: ast_identifier
+    action:
+      operation: add_prefix
+      anchor: "{var} = array.new"
+      language: pine
+      template: "var {var} = array.new"
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: false
+    verification:
+      compiler:
+        must_pass: true
+      post_condition:
+        function: exists
+        variable: "{var}"
+    fallbacks: []
+    dependencies: []
+
+  - id: state.matrix_eviction
+    name: "Matrix bank harus punya eviction (remove_row)"
+    version: 1
+    priority: high
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: analyzer
+        ast_patterns:
+          - node_type: matrix_new_call
+            context: STATE
+            not_contains: remove_row
+    preconditions:
+      persistence:
+        must_be_var: true
+      type_check:
+        must_be: matrix
+    parameters:
+      - name: var
+        type: string
+        source: ast_identifier
+    action:
+      operation: inject_after
+      anchor: matrix.add_row
+      language: pine
+      template: |
+        if {var}.rows() > memoryDepth
+            {var}.remove_row({var}.rows() - 1)
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: false
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []
+
+  - id: state.fix_int_na
+    name: "Ubah inisialisasi var int = na menjadi = 0"
+    version: 1
+    priority: required
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: compiler
+        error_signals:
+          - "Value with NA type cannot be assigned to a variable that was defined without type keyword"
+    preconditions: {}
+    parameters: []
+    action:
+      operation: replace
+      language: pine
+      template: ""
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: true
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []
+  - id: state.fix_int_na
+    name: "Ubah inisialisasi var int = na menjadi = 0"
+    version: 1
+    priority: required
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: compiler
+        error_signals:
+          - "Value with NA type cannot be assigned to a variable that was defined without type keyword"
+    preconditions: {}
+    parameters: []
+    action:
+      operation: replace_pattern
+      anchor: "= na"
+      language: pine
+      template: "= 0"
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: true
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []
+  - id: state.fix_int_na
+    name: "Ubah inisialisasi var int = na menjadi = 0"
+    version: 1
+    priority: required
+    compatibility:
+      pine:
+        min: 5
+        max: 6
+    triggers:
+      - type: compiler
+        error_signals:
+          - "NA type cannot be assigned"
+          - "Value with NA"
+          - "cannot be assigned to a variable that was defined without type keyword"
+    preconditions: {}
+    parameters: []
+    action:
+      operation: replace_pattern
+      anchor: "= na"
+      language: pine
+      template: "= 0"
+      safety:
+        reversible: true
+        backup_required: true
+        modifies_existing_logic: true
+    verification:
+      compiler:
+        must_pass: true
+    fallbacks: []
+    dependencies: []

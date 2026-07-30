@@ -1,0 +1,27 @@
+{
+  "cleanup.fifo.shift": {
+    "usage_count": 10,
+    "success_count": 8,
+    "failure_count": 2
+  },
+  "state.matrix.bank": {
+    "usage_count": 2,
+    "success_count": 1,
+    "failure_count": 1
+  },
+  "cleanup.box_delete": {
+    "usage_count": 8,
+    "success_count": 3,
+    "failure_count": 5
+  },
+  "functions.no_return": {
+    "usage_count": 7,
+    "success_count": 5,
+    "failure_count": 2
+  },
+  "state.fix_int_na": {
+    "usage_count": 7,
+    "success_count": 7,
+    "failure_count": 0
+  }
+}
