@@ -103,7 +103,7 @@ class FeatureExtractor(ASTVisitor):
                     for stmt in block.statements:
                         if isinstance(stmt, ExpressionStatement):
                             if self._is_push_call(stmt.expression):
-                                self._add_feature('cleanup', 
+                                self._add_feature('cleanup',
                                     'Loop tanpa eviction terdeteksi untuk array push',
                                     'Tambahkan eviction (shift/pop/remove) di dalam loop',
                                     'CALCULATIONS', 'loop_no_eviction_v1')
@@ -118,7 +118,7 @@ class FeatureExtractor(ASTVisitor):
             return expr.func.member in ('push', 'add_row', 'add_col')
         return False
 
-    def _add_feature(self, module, goal, tactic, context, detector_id, anchor=None, diag_code=None, diag_msg=None):
+    def _add_feature(self, module, goal, tactic, context, detector_id, anchor=None, diag_code=None, diag_msg=None, ctx_context=None):
         sig = SignatureGenerator.generate(tactic)
         if isinstance(anchor, SourceSpan):
             anchor_str = f"line {anchor.start_line}:{anchor.start_col}"
@@ -131,6 +131,10 @@ class FeatureExtractor(ASTVisitor):
             diag = Diagnostic(diag_code, diag_msg or goal, Severity.WARNING, anchor)
             self.diagnostics.add(diag)
         feat = Feature(module, goal, tactic, context, sig, detector_id, anchor_str, diagnostic=diag)
+        if ctx_context:
+            feat.ctx_context = ctx_context
+        else:
+            feat.ctx_context = "is_indicator"
         self.features.add(feat)
 
     # Visitor overrides
@@ -207,6 +211,16 @@ class FeatureExtractor(ASTVisitor):
                               'request.security(..., lookahead = barmerge.lookahead_off)',
                               'DATA_FETCHING', 'request_security_lookahead_v1',
                               anchor=node.span, diag_code='PINE0005')
+
+    def _get_context(self) -> str:
+        """Konteks saat ini: in_loop / in_if / in_function / is_indicator"""
+        if self.ctx.in_loop:
+            return "in_loop"
+        if self.ctx.in_if:
+            return "in_if"
+        if self.ctx.in_function:
+            return "in_function"
+        return "is_indicator"
 
     def _get_func_name(self, node):
         if isinstance(node, Identifier): return node.name
