@@ -48,6 +48,7 @@ def main():
 
     args = parser.parse_args()
 
+    # Set log level
     if hasattr(args, 'quiet') and args.quiet:
         logger.setLevel(logging.ERROR)
     elif hasattr(args, 'verbose') and args.verbose:
@@ -106,6 +107,7 @@ def main():
             logger.error(f"File tidak ditemukan: {file_path}")
             return
 
+        # Linter otomatis (default ON)
         if not args.no_lint:
             from engine.pine_linter import lint_file
             report = lint_file(file_path)
@@ -145,11 +147,13 @@ def main():
             logger.warning("Tidak ada rule yang cocok dengan kode ini.")
             return
 
+        # Tentukan output path
         if args.output:
             output_path = args.output
         else:
             output_path = file_path.replace(".pine", "_fixed.pine")
 
+        # Backup jika diperlukan
         if args.backup and os.path.exists(file_path):
             backup_path = file_path + ".bak"
             import shutil
@@ -159,7 +163,7 @@ def main():
         applied = False
         tried_ids = set()
 
-        def _try_rule(rule, patcher, resolver):
+        def _try_rule(rule, patcher, verifier, resolver):
             nonlocal applied
             rule_id = rule.get("id")
             if rule_id in tried_ids:
@@ -173,14 +177,13 @@ def main():
                 return False
             logger.debug(f"Resolved: {resolved}")
 
+            # Pastikan patch menggunakan context yang benar
             patcher.context = context
             patched = patcher.apply(rule, resolved)
             if patched == user_code:
                 logger.warning(f"Patch tidak mengubah kode, skip.")
                 return False
 
-            # 🔥 Buat VerificationEngine dengan patched_code yang benar
-            verifier = VerificationEngine(user_code, patched, context)
             passed, msg = verifier.verify(rule, resolved)
             record_usage(rule_id, passed)
 
@@ -190,6 +193,7 @@ def main():
                     print(patched)
                     print("─────────────────────")
                 else:
+                    # Buat direktori output jika belum ada
                     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
                     with open(output_path, "w", encoding="utf-8") as f:
                         f.write(patched)
@@ -201,17 +205,20 @@ def main():
                 logger.warning(f"Verifikasi gagal: {msg}")
                 return False
 
+        # Loop rule utama
         patcher = PatchExecutor(user_code, context)
+        verifier = VerificationEngine(user_code, user_code, context)  # placeholder, akan diganti per rule
         resolver = ParameterResolver(context)
 
         for rule in matched:
-            if _try_rule(rule, patcher, resolver):
+            if _try_rule(rule, patcher, verifier, resolver):
                 break
+            # Coba fallback
             fallbacks = rule.get("fallbacks", [])
             for fb in fallbacks:
                 fb_id = fb.get("id") if isinstance(fb, dict) else fb
                 fb_rule = loader.get_by_id(fb_id)
-                if fb_rule and _try_rule(fb_rule, patcher, resolver):
+                if fb_rule and _try_rule(fb_rule, patcher, verifier, resolver):
                     break
             if applied:
                 break

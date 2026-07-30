@@ -2,7 +2,6 @@
 import sys
 import argparse
 import os
-import logging
 from engine.loader import RuleLoader
 from engine.matcher import RuleMatcher
 from engine.resolver import ParameterResolver
@@ -10,13 +9,6 @@ from engine.patch import PatchExecutor
 from engine.verify import VerificationEngine
 from engine.telemetry import load_telemetry, record_usage
 from engine.parser import PineAST
-
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(levelname)s: %(message)s'
-)
-logger = logging.getLogger("bengkel_pine")
 
 def main():
     parser = argparse.ArgumentParser(description="BENGKEL-PINE Engine")
@@ -32,10 +24,6 @@ def main():
     p_repair.add_argument("--error", help="Pesan error dari kompiler (opsional)")
     p_repair.add_argument("--dry-run", action="store_true", help="Tampilkan hasil tanpa menulis file")
     p_repair.add_argument("--no-lint", action="store_true", help="Nonaktifkan linter otomatis")
-    p_repair.add_argument("--output", help="Path output (default: file_fixed.pine)")
-    p_repair.add_argument("--backup", action="store_true", help="Backup original file sebelum overwrite")
-    p_repair.add_argument("--quiet", action="store_true", help="Minimal output")
-    p_repair.add_argument("--verbose", action="store_true", help="Tampilkan detail debug")
 
     p_extract = subparsers.add_parser("extract", help="Ekstrak pola dari file .pine ke YAML")
     p_extract.add_argument("file", help="File .pine yang akan diekstrak")
@@ -48,19 +36,14 @@ def main():
 
     args = parser.parse_args()
 
-    if hasattr(args, 'quiet') and args.quiet:
-        logger.setLevel(logging.ERROR)
-    elif hasattr(args, 'verbose') and args.verbose:
-        logger.setLevel(logging.DEBUG)
-
     if args.command == "list":
         loader = RuleLoader(strict=args.strict)
         rules = loader.load_all()
         print(f"\n📊 {loader.summary()}")
         for err in loader.get_errors()[:15]:
-            logger.warning(err)
+            print(f"⚠️ {err}")
         for w in loader.get_warnings()[:10]:
-            logger.info(w)
+            print(f"  {w}")
         for r in rules:
             print(f"  - {r.get('id')} [{r.get('priority')}]")
 
@@ -82,7 +65,7 @@ def main():
         if errs:
             print("\n── Issues ──")
             for e in errs:
-                logger.warning(e)
+                print(f"  {e}")
         actionable = [r for r in loader.validated_rules if r.is_actionable()]
         print(f"\n✅ Actionable rules: {len(actionable)}")
         for r in actionable:
@@ -93,7 +76,7 @@ def main():
     elif args.command == "lint":
         from engine.pine_linter import lint_file
         if not os.path.exists(args.file):
-            logger.error(f"File tidak ditemukan: {args.file}")
+            print(f"❌ File tidak ditemukan: {args.file}")
             sys.exit(1)
         report = lint_file(args.file)
         print(report.format())
@@ -103,9 +86,10 @@ def main():
     elif args.command == "repair":
         file_path = args.file
         if not os.path.exists(file_path):
-            logger.error(f"File tidak ditemukan: {file_path}")
+            print(f"❌ File tidak ditemukan: {file_path}")
             return
 
+        # 🔥 Linter otomatis (default ON, bisa dimatikan dengan --no-lint)
         if not args.no_lint:
             from engine.pine_linter import lint_file
             report = lint_file(file_path)
@@ -123,101 +107,106 @@ def main():
             "functions": ast.functions,
             "ast": ast,
         }
-        logger.debug(f"AST: arrays={ast.get_arrays()}, matrices={ast.get_matrices()}, constants={ast.get_constants()}")
+        print(f"🔍 AST: arrays={ast.get_arrays()}, matrices={ast.get_matrices()}, constants={ast.get_constants()}")
 
         loader = RuleLoader()
         rules = loader.load_all()
         if not rules:
-            logger.error("Tidak ada rule yang dimuat.")
+            print("❌ Tidak ada rule yang dimuat.")
             for err in loader.get_errors():
-                logger.error(err)
+                print(f"   {err}")
             return
 
         matcher = RuleMatcher(rules)
         error_text = args.error or ""
 
         if error_text:
-            matched = matcher.match(error_text=error_text, ast=ast, strategy="intersect")
+            matched = matcher.match_by_error(error_text)
+            if not matched:
+                matched = matcher.match_by_ast(ast)
         else:
-            matched = matcher.match(ast=ast, strategy="union")
+            matched = matcher.match_by_ast(ast)
 
         if not matched:
-            logger.warning("Tidak ada rule yang cocok dengan kode ini.")
+            print("❌ Tidak ada rule yang cocok dengan kode ini.")
             return
-
-        if args.output:
-            output_path = args.output
-        else:
-            output_path = file_path.replace(".pine", "_fixed.pine")
-
-        if args.backup and os.path.exists(file_path):
-            backup_path = file_path + ".bak"
-            import shutil
-            shutil.copy2(file_path, backup_path)
-            logger.info(f"Backup original ke {backup_path}")
 
         applied = False
         tried_ids = set()
-
-        def _try_rule(rule, patcher, resolver):
-            nonlocal applied
+        for rule in matched:
             rule_id = rule.get("id")
             if rule_id in tried_ids:
-                return False
+                continue
             tried_ids.add(rule_id)
-
-            logger.info(f"Mencoba rule: {rule_id}")
+            print(f"🔧 Mencoba rule: {rule_id}")
+            resolver = ParameterResolver(context)
             resolved = resolver.resolve(rule)
             if resolved is None:
-                logger.warning(f"Gagal resolve parameter, skip.")
-                return False
-            logger.debug(f"Resolved: {resolved}")
-
-            patcher.context = context
-            patched = patcher.apply(rule, resolved)
-            if patched == user_code:
-                logger.warning(f"Patch tidak mengubah kode, skip.")
-                return False
-
-            # 🔥 Buat VerificationEngine dengan patched_code yang benar
-            verifier = VerificationEngine(user_code, patched, context)
+                print("   ❌ Gagal resolve parameter, skip.")
+                continue
+            print(f"   ✅ Resolved: {resolved}")
+            patcher = PatchExecutor(user_code, context)
+            patched_code = patcher.apply(rule, resolved)
+            if patched_code == user_code:
+                print("   ⚠️ Patch tidak mengubah kode, skip.")
+                continue
+            verifier = VerificationEngine(user_code, patched_code, context)
             passed, msg = verifier.verify(rule, resolved)
-            record_usage(rule_id, passed)
-
             if passed:
                 if args.dry_run:
                     print("─── DRY-RUN OUTPUT ───")
-                    print(patched)
+                    print(patched_code)
                     print("─────────────────────")
                 else:
-                    os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
+                    output_path = file_path.replace(".pine", "_fixed.pine")
                     with open(output_path, "w", encoding="utf-8") as f:
-                        f.write(patched)
-                    logger.info(f"Kode berhasil diperbaiki! Output: {output_path}")
-                logger.info(msg)
+                        f.write(patched_code)
+                    print(f"✅ Kode berhasil diperbaiki! Output: {output_path}")
+                print(f"📋 {msg}")
+                record_usage(rule_id, True)
                 applied = True
-                return True
+                break
             else:
-                logger.warning(f"Verifikasi gagal: {msg}")
-                return False
-
-        patcher = PatchExecutor(user_code, context)
-        resolver = ParameterResolver(context)
-
-        for rule in matched:
-            if _try_rule(rule, patcher, resolver):
-                break
-            fallbacks = rule.get("fallbacks", [])
-            for fb in fallbacks:
-                fb_id = fb.get("id") if isinstance(fb, dict) else fb
-                fb_rule = loader.get_by_id(fb_id)
-                if fb_rule and _try_rule(fb_rule, patcher, resolver):
+                print(f"   ❌ {msg}")
+                record_usage(rule_id, False)
+                fallbacks = rule.get("fallbacks", [])
+                for fb in fallbacks:
+                    fb_id = fb.get("id") if isinstance(fb, dict) else fb
+                    if not fb_id or fb_id in tried_ids:
+                        continue
+                    print(f"   🔄 Mencoba fallback: {fb_id}")
+                    fb_rule = loader.get_by_id(fb_id)
+                    if not fb_rule:
+                        continue
+                    tried_ids.add(fb_id)
+                    resolved_fb = resolver.resolve(fb_rule)
+                    if resolved_fb is None:
+                        continue
+                    patched_fb = patcher.apply(fb_rule, resolved_fb)
+                    if patched_fb == user_code:
+                        continue
+                    passed_fb, msg_fb = verifier.verify(fb_rule, resolved_fb)
+                    if passed_fb:
+                        if args.dry_run:
+                            print("─── DRY-RUN (fallback) ───")
+                            print(patched_fb)
+                            print("─────────────────────────")
+                        else:
+                            output_path = file_path.replace(".pine", "_fixed.pine")
+                            with open(output_path, "w", encoding="utf-8") as f:
+                                f.write(patched_fb)
+                            print(f"✅ Fallback berhasil! Output: {output_path}")
+                        print(f"📋 {msg_fb}")
+                        record_usage(fb_id, True)
+                        applied = True
+                        break
+                    else:
+                        record_usage(fb_id, False)
+                if applied:
                     break
-            if applied:
-                break
 
         if not applied:
-            logger.error("Tidak ada rule yang berhasil memperbaiki kode.")
+            print("❌ Tidak ada rule yang berhasil memperbaiki kode.")
             sys.exit(1)
 
     elif args.command == "extract":

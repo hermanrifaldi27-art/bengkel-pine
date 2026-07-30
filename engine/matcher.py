@@ -66,3 +66,55 @@ class RuleMatcher:
         if node_type == 'matrix_new_call' and 'matrix.new' in code and 'matrix.add_row' in code:
             return True
         return False
+    def match(self, error_text: str = None, ast=None, strategy: str = "union"):
+        """Match dengan strategi: union, intersect, error_first, ast_first"""
+        error_matches = []
+        ast_matches = []
+        if error_text:
+            error_matches = self.match_by_error(error_text)
+        if ast:
+            ast_matches = self.match_by_ast(ast)
+        if strategy == "union":
+            # Gabungkan, deduplikasi
+            seen = set()
+            result = []
+            for r in error_matches + ast_matches:
+                rid = r.get("id")
+                if rid not in seen:
+                    seen.add(rid)
+                    result.append(r)
+            return result
+        elif strategy == "intersect":
+            # Hanya yang muncul di kedua list
+            error_ids = {r.get("id") for r in error_matches}
+            return [r for r in ast_matches if r.get("id") in error_ids]
+        elif strategy == "error_first":
+            return error_matches or ast_matches
+        elif strategy == "ast_first":
+            return ast_matches or error_matches
+        return ast_matches or error_matches
+    def match(self, error_text: str = None, ast=None, strategy: str = "union"):
+        """Match dengan strategi: union, intersect, error_first, ast_first"""
+        error_matches = []
+        ast_matches = []
+        if error_text:
+            error_matches = self.match_by_error(error_text)
+        if ast:
+            ast_matches = self.match_by_ast(ast)
+        if strategy == "union":
+            seen = set()
+            result = []
+            for r in error_matches + ast_matches:
+                rid = r.get("id")
+                if rid not in seen:
+                    seen.add(rid)
+                    result.append(r)
+            return result
+        elif strategy == "intersect":
+            error_ids = {r.get("id") for r in error_matches}
+            return [r for r in ast_matches if r.get("id") in error_ids]
+        elif strategy == "error_first":
+            return error_matches or ast_matches
+        elif strategy == "ast_first":
+            return ast_matches or error_matches
+        return ast_matches or error_matches

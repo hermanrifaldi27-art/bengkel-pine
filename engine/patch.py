@@ -1,5 +1,8 @@
 import re
+import logging
 from typing import Dict, Any
+
+logger = logging.getLogger("bengkel_pine")
 
 class PatchExecutor:
     def __init__(self, code: str, context: Dict = None):
@@ -13,10 +16,8 @@ class PatchExecutor:
         template = action.get('template', '')
         target_module = action.get('target_module', '')
 
-        # Type-aware: jika target variabel ada di matrices, ubah template matrix
         target_var = resolved.get('var')
         if target_var and target_var in self.context.get('matrices', []):
-            # Pastikan template matrix, bukan array
             if 'array.shift' in template:
                 template = template.replace('array.shift', 'matrix.remove_row')
                 template = re.sub(r'array\.size\(([^)]+)\)', r'matrix.rows(\1)', template)
@@ -26,6 +27,8 @@ class PatchExecutor:
                 continue
             template = template.replace(f'{{{key}}}', str(val))
             anchor = anchor.replace(f'{{{key}}}', str(val))
+
+        logger.debug(f"Operation: {operation}, Resolved anchor: {anchor}")
 
         if operation == 'remove_keyword':
             return self._remove_keyword(anchor)
@@ -44,6 +47,7 @@ class PatchExecutor:
         elif operation == 'add_parameter':
             return self._add_parameter(anchor, template)
         else:
+            logger.warning(f"Operation '{operation}' tidak dikenali")
             return self.code
 
     def _remove_keyword(self, keyword: str) -> str:
@@ -57,7 +61,9 @@ class PatchExecutor:
 
     def _inject_after(self, anchor: str, template: str) -> str:
         if not anchor or not template:
+            logger.warning("Anchor atau template kosong")
             return self.code
+
         lines = self.code.splitlines(keepends=True)
         new_lines = []
         injected = False
@@ -68,6 +74,10 @@ class PatchExecutor:
                 for t in template.splitlines():
                     new_lines.append(indent + t + '\n')
                 injected = True
+                logger.debug(f"Injected after line: {line.strip()}")
+        if not injected:
+            logger.warning(f"Anchor '{anchor}' tidak ditemukan, inject di akhir file")
+            new_lines.append('\n' + template + '\n')
         return ''.join(new_lines)
 
     def _replace_pattern(self, pattern: str, replacement: str) -> str:

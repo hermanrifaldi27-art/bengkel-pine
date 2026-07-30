@@ -1,6 +1,6 @@
 rules:
   - id: cleanup.fifo.shift
-    name: Eviction array FIFO (while + shift)
+    name: "Eviction array FIFO (while + shift)"
     version: 1
     priority: required
     compatibility:
@@ -35,9 +35,11 @@ rules:
         maximum: 50000
     action:
       operation: inject_after
-      anchor: "array.push({var}"
+      anchor: "array.push({var},"
       language: pine
-      template: "while array.size({var}) > {limit}\n    array.shift({var})"
+      template: |
+        while array.size({var}) > {limit}
+            array.shift({var})
       safety:
         reversible: true
         backup_required: true
@@ -54,7 +56,7 @@ rules:
     dependencies: []
 
   - id: cleanup.matrix.remove_row
-    name: Eviction matrix dengan remove_row
+    name: "Eviction matrix dengan remove_row"
     version: 1
     priority: high
     compatibility:
@@ -86,9 +88,11 @@ rules:
         maximum: 50000
     action:
       operation: inject_after
-      anchor: "matrix.add_row({var}"
+      anchor: "matrix.add_row({var},"
       language: pine
-      template: "if matrix.rows({var}) > {limit}\n    matrix.remove_row({var}, matrix.rows({var}) - 1)"
+      template: |
+        if matrix.rows({var}) > {limit}
+            matrix.remove_row({var}, matrix.rows({var}) - 1)
       safety:
         reversible: true
         backup_required: true
