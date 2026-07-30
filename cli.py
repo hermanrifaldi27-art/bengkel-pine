@@ -3,6 +3,8 @@ import sys
 import argparse
 import os
 import logging
+import shutil
+from pathlib import Path
 from engine.loader import RuleLoader
 from engine.matcher import RuleMatcher
 from engine.resolver import ParameterResolver
@@ -10,6 +12,8 @@ from engine.patch import PatchExecutor
 from engine.verify import VerificationEngine
 from engine.telemetry import load_telemetry, record_usage
 from engine.parser import PineAST
+from engine.pine_linter import lint_file
+from engine.extractor import extract_features
 
 # Setup logging
 logging.basicConfig(
@@ -18,6 +22,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger("bengkel_pine")
 
+# ─── SAFETY: Prevent path traversal ───────────────────────────────
+def is_safe_path(base_path: str, user_path: str) -> bool:
+    """Prevent path traversal attacks (../../etc/passwd)"""
+    base = os.path.realpath(base_path)
+    user = os.path.realpath(os.path.join(base_path, user_path))
+    return os.path.commonpath([base, user]) == base
+
+# ─── MAIN ──────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="BENGKEL-PINE Engine")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -93,7 +105,6 @@ def main():
             sys.exit(1)
 
     elif args.command == "lint":
-        from engine.pine_linter import lint_file
         if not os.path.exists(args.file):
             logger.error(f"File tidak ditemukan: {args.file}")
             sys.exit(1)
@@ -106,10 +117,9 @@ def main():
         file_path = args.file
         if not os.path.exists(file_path):
             logger.error(f"File tidak ditemukan: {file_path}")
-            return
+            sys.exit(1)
 
         if not args.no_lint:
-            from engine.pine_linter import lint_file
             report = lint_file(file_path)
             print(report.format())
 
@@ -125,7 +135,8 @@ def main():
             "functions": ast.functions,
             "ast": ast,
         }
-        logger.debug(f"AST: arrays={ast.get_arrays()}, matrices={ast.get_matrices()}, constants={ast.get_constants()}")
+        # 🔥 Log hanya jumlah, bukan konten (privasi & keamanan)
+        logger.debug(f"AST: {len(ast.get_arrays())} arrays, {len(ast.get_matrices())} matrices, {len(ast.get_constants())} constants")
 
         loader = RuleLoader()
         rules = loader.load_all()
@@ -136,11 +147,13 @@ def main():
             return
 
         matcher = RuleMatcher(rules)
-        error_text = args.error or ""
+        # 🔥 Sanitasi error_text: hapus newline, batasi 500 karakter
+        error_text = ""
+        if args.error:
+            error_text = args.error.replace('\n', ' ').replace('\r', ' ')[:500]
 
         if error_text:
             matched = matcher.match(error_text=error_text, ast=ast, strategy="intersect")
-            # 🔥 FORCE-UNION: Jika intersect gagal dan user minta force-union, coba union
             if not matched and getattr(args, 'force_union', False):
                 logger.info("Intersect tidak match, mencoba union mode (--force-union)")
                 matched = matcher.match(ast=ast, strategy="union")
@@ -151,17 +164,31 @@ def main():
             logger.warning("Tidak ada rule yang cocok dengan kode ini.")
             return
 
+        # 🔥 Tentukan output path dengan pathlib
         if args.output:
             output_path = args.output
         else:
-            output_path = file_path.replace(".pine", "_fixed.pine")
+            p = Path(file_path)
+            if p.suffix.lower() == '.pine':
+                output_path = str(p.with_stem(p.stem + '_fixed'))
+            else:
+                output_path = str(p.with_stem(p.stem + '_fixed').with_suffix('.pine'))
+
+        # 🔥 Cegah path traversal
+        if not is_safe_path(os.getcwd(), output_path):
+            logger.error("⚠️ Path traversal detected! Output path tidak aman.")
+            sys.exit(1)
 
         # Backup jika diperlukan (kecuali dry-run)
         if not args.dry_run and args.backup and os.path.exists(output_path):
             backup_path = output_path + ".bak"
-            import shutil
-            shutil.copy2(output_path, backup_path)
-            logger.info(f"Backup file output sebelumnya ke {backup_path}")
+            try:
+                shutil.copy2(output_path, backup_path)
+                logger.info(f"Backup file output sebelumnya ke {backup_path}")
+            except (OSError, shutil.Error) as e:
+                logger.error(f"Gagal backup file: {e}")
+                if not args.force:
+                    sys.exit(1)
 
         applied = False
         tried_ids = set()
@@ -196,10 +223,8 @@ def main():
                     print(patched)
                     print("─────────────────────")
                 else:
-                    # Cek jika file ada dan tidak pake --force, kita kasih warning (tapi tetap tulis)
                     if os.path.exists(output_path) and not args.force:
                         logger.warning(f"File output '{output_path}' sudah ada. Gunakan --force untuk menimpa.")
-                        # Tapi tetap kita tulis agar tidak error, karena user sudah punya --force
                     os.makedirs(os.path.dirname(output_path) or '.', exist_ok=True)
                     with open(output_path, "w", encoding="utf-8") as f:
                         f.write(patched)
@@ -231,7 +256,6 @@ def main():
             sys.exit(1)
 
     elif args.command == "extract":
-        from engine.extractor import extract_features
         extract_features(args.file)
 
 if __name__ == "__main__":
