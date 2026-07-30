@@ -69,9 +69,9 @@ float ema200 = ta.ema(close, 200)
 [monthlyHighRaw, monthlyLowRaw] = request.security(syminfo.tickerid, "M", [high[1], low[1]],
     lookahead=barmerge.lookahead_off, gaps=barmerge.gaps_off)
 
-var float dailyHigh = na, dailyLow = na
-var float weeklyHigh = na, weeklyLow = na
-var float monthlyHigh = na, monthlyLow = na
+var float dailyHigh = 0, dailyLow = 0
+var float weeklyHigh = 0, weeklyLow = 0
+var float monthlyHigh = 0, monthlyLow = 0
 
 if showDaily and timeframe.change("D")
     dailyHigh := dailyHighRaw
@@ -111,10 +111,10 @@ var bool evtNewFVG = false
 
 // ── State machines ──
 var int trend = 0
-var int lastSwingHighBar = na, lastSwingLowBar = na
-var float lastSwingHigh = na, lastSwingLow = na
-var int lastInternalHighBar = na, lastInternalLowBar = na
-var float lastInternalHigh = na, lastInternalLow = na
+var int lastSwingHighBar = 0, lastSwingLowBar = 0
+var float lastSwingHigh = 0, lastSwingLow = 0
+var int lastInternalHighBar = 0, lastInternalLowBar = 0
+var float lastInternalHigh = 0, lastInternalLow = 0
 
 // ── REGISTRIES (WAJIB – sebelumnya hilang) ──
 var array<OrderBlock> obs  = array.new<OrderBlock>()
@@ -125,9 +125,9 @@ var array<box>   obBoxPool  = array.new<box>()
 var array<line>  obLinePool = array.new<line>()
 var array<box>   fvgBoxPool = array.new<box>()
 var array<line>  fvgLinePool = array.new<line>()
-var line         rbdResLine = na, rbdSupLine = na
-var label        rbdResLbl  = na, rbdSupLbl  = na
-var table        dash       = na
+var line         rbdResLine = 0, rbdSupLine = 0
+var label        rbdResLbl  = 0, rbdSupLbl  = 0
+var table        dash       = 0
 
 // ───────── 5. ENGINE FUNCTIONS ─────────
 detectSwings() =>
@@ -171,7 +171,7 @@ checkStructure() =>
 
 findOrderBlock(int bias, int pivotBar) =>
     int lookback = math.min(pivotBar, 10)
-    int obBar = na
+    int obBar = 0
     for i = 1 to lookback
         if bias == BULLISH and close[i] < open[i]
             obBar := bar_index - i

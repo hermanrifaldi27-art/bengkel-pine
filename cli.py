@@ -68,14 +68,19 @@ def main():
             print("❌ Tidak ada rule yang dimuat.")
             return
         
-        error_text = args.error or ""
         matcher = RuleMatcher(rules)
+        error_text = args.error or ""
+        
         if error_text:
             matched = matcher.match_by_error(error_text)
             if not matched:
-                matched = rules
+                matched = matcher.match_by_ast(ast)
         else:
-            matched = rules
+            matched = matcher.match_by_ast(ast)
+        
+        if not matched:
+            print("❌ Tidak ada rule yang cocok dengan kode ini.")
+            return
         
         applied = False
         for rule in matched:
@@ -115,7 +120,6 @@ def main():
             sys.exit(1)
     
     elif args.command == "extract":
-        # 🔥 Import hanya di sini, saat perintah extract dijalankan
         from engine.extractor import extract_features
         extract_features(args.file)
 

@@ -10,8 +10,8 @@
     "failure_count": 1
   },
   "cleanup.box_delete": {
-    "usage_count": 8,
-    "success_count": 3,
+    "usage_count": 9,
+    "success_count": 4,
     "failure_count": 5
   },
   "functions.no_return": {
@@ -20,8 +20,8 @@
     "failure_count": 2
   },
   "state.fix_int_na": {
-    "usage_count": 7,
-    "success_count": 7,
+    "usage_count": 8,
+    "success_count": 8,
     "failure_count": 0
   }
 }
