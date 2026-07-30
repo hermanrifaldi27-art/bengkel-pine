@@ -193,8 +193,10 @@ def cmd_audit(args):
     print()
 
     # 2. Best Practice
+    from engine.best_practice_context import build_context
+    ctx = build_context(ast.root, code)
     orch = BestPracticeOrchestrator()
-    orch.audit(ast.root, code)
+    orch.audit(ctx, code)
     print(orch.format_report())
     print()
 

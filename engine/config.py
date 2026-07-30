@@ -65,3 +65,14 @@ COLORS = {
 }
 
 DISCLAIMER = "Skor menilai kualitas penulisan kode, BUKAN jaminan keuntungan trading."
+
+# ── Audit ──
+VALID_AUDIT_CATEGORIES = {'reliability', 'memory', 'performance', 'render', 'debug',
+                          'scope', 'type_safety', 'ux', 'readability', 'code_structure',
+                          'complexity', 'security', 'architecture', 'maintainability'}
+REPORT_WIDTH = 58
+MAX_POINTS_PER_CATEGORY = {
+    'reliability': 25, 'memory': 20, 'performance': 15,
+    'code_structure': 15, 'type_safety': 15, 'render': 10,
+    'debug': 10, 'scope': 5, 'ux': 10, 'readability': 10
+}
