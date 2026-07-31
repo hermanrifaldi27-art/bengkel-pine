@@ -931,11 +931,15 @@ class PrattParser:
                         if field_type is None: field_type = Identifier(typ_tok.value)
                     else: field_type = Identifier(typ_tok.value)
                 field_name = self._expect(TokenType.IDENTIFIER)
+                if field_name is None:
+                    if self._recovery_mode:
+                        self._skip_until_sync()
+                        break
+                    raise SyntaxError("Expected field name")
                 default = None
                 if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
                     self._next(); default = self.parse_expr(0)
-                if field_type and field_name: fields.append(TypeField(field_name.value, field_type, default))
-                else: break
+                if field_type: fields.append(TypeField(field_name.value, field_type, default))
             if self._peek() and self._peek().type == TokenType.DEDENT: self._next()
         node = TypeDeclaration(name_tok.value, fields)
         end_tok = self.tokens[self.pos-1] if self.pos>0 else start_tok
