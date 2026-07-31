@@ -2,11 +2,11 @@ anchor: line 82:3
 auto_fix_template: request.security(..., lookahead = barmerge.lookahead_off)
 confidence: 1.0
 detector_id: request_security_lookahead_v1
-evidence_count: 51
+evidence_count: 72
 first_seen: '2026-07-31T02:48:50.417393'
 goal: request.security tanpa lookahead_off -> tambahkan
 id: 08b10ade1c86
-last_seen: '2026-07-31T04:48:35.315393'
+last_seen: '2026-07-31T05:12:05.693059'
 module: data_fetching
 severity: ERROR
 tactic: request.security(..., lookahead = barmerge.lookahead_off)
