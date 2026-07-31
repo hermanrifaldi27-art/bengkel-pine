@@ -637,16 +637,16 @@ class PrattParser:
             self._skip_comments_and_newlines()
             if not self._peek(): break
             typ = None
-            if self._peek().type == TokenType.IDENTIFIER:
-                typ_tok = self._peek()
-                if self.pos+1 < len(self.tokens) and self.tokens[self.pos+1].type == TokenType.IDENTIFIER:
-                    self._next(); typ = Identifier(typ_tok.value)
+            # Gunakan _parse_type untuk menangani generic/qualified type
+            typ = self._parse_type()
             name_tok = self._expect(TokenType.IDENTIFIER)
             default = None
             if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
                 self._next(); default = self.parse_expr(0)
-            if name_tok: params.append({'name':name_tok.value, 'type':typ, 'default':default})
-            if self._peek() and self._peek().type == TokenType.COMMA: self._next()
+            if name_tok:
+                params.append({'name': name_tok.value, 'type': typ, 'default': default})
+            if self._peek() and self._peek().type == TokenType.COMMA:
+                self._next()
         if not (self._peek() and self._peek().type == TokenType.BRACKET and self._peek().value == ')'):
             return None
         self._next()
@@ -1298,8 +1298,10 @@ class PineAST:
 
     def _extract_symbols_fallback(self):
         import re
-        for m in re.finditer(r'var\s+(\w+)\s*=\s*(array|matrix)\.new', self.code):
-            name, kind = m.group(1), m.group(2)
+        for m in re.finditer(r'(?:var|varip)\s+(?:(array|matrix)(?:<[^>]+>)?\s+)?(\w+)\s*=\s*(array|matrix)\.new', self.code):
+            kind_hint, name, kind = m.group(1), m.group(2), m.group(3)
+            if not kind:
+                kind = kind_hint  # fallback ke type annotation jika ada
             if kind == 'array' and name not in self.arrays:
                 self.arrays.append(name)
                 self.symbols[name] = 'array'
