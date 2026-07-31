@@ -845,7 +845,11 @@ class PrattParser:
         return stmts
 
     def _parse_var_decl(self):
-        tok = self._expect(TokenType.KEYWORD); varip = tok.value == 'varip'
+        tok = self._expect(TokenType.KEYWORD)
+        if tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected 'var' or 'varip'")
+        varip = tok.value == 'varip'
         typ = None
         if self._peek() and self._peek().type == TokenType.IDENTIFIER:
             first = self._peek()
@@ -857,27 +861,38 @@ class PrattParser:
                 elif next_tok.type == TokenType.IDENTIFIER:
                     self._next(); typ = Identifier(first.value)
         name_tok = self._expect(TokenType.IDENTIFIER)
+        if name_tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected variable name")
         value = None
         if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value in ('=', ':='):
             self._next(); value = self.parse_expr(0)
         node = VarDeclaration(varip, typ, name_tok.value, value)
-        if name_tok: node.span = SourceSpan(name_tok.line, name_tok.col, name_tok.line, name_tok.col+len(name_tok.value))
+        node.span = SourceSpan(name_tok.line, name_tok.col, name_tok.line, name_tok.col+len(name_tok.value))
         return node
 
     def _parse_const_decl(self):
-        self._expect(TokenType.KEYWORD, 'const'); name_tok = self._expect(TokenType.IDENTIFIER)
-        self._expect(TokenType.OPERATOR, '='); value = self.parse_expr(0)
+        self._expect(TokenType.KEYWORD, 'const')
+        name_tok = self._expect(TokenType.IDENTIFIER)
+        if name_tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected constant name")
+        self._expect(TokenType.OPERATOR, '=')
+        value = self.parse_expr(0)
         if value is None:
             if self._recovery_mode: value = IntegerLiteral(0)
             else: raise SyntaxError(f"Expected value for const '{name_tok.value}'")
         node = ConstDeclaration(name_tok.value, value)
-        if name_tok: node.span = SourceSpan(name_tok.line, name_tok.col, name_tok.line, name_tok.col+len(name_tok.value))
+        node.span = SourceSpan(name_tok.line, name_tok.col, name_tok.line, name_tok.col+len(name_tok.value))
         return node
 
     def _parse_type_decl(self):
         start_tok = self._peek()
         self._expect(TokenType.KEYWORD, 'type')
         name_tok = self._expect(TokenType.IDENTIFIER)
+        if name_tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected type name")
         fields = []
         if self._peek() and self._peek().type == TokenType.BRACKET and self._peek().value == '{':
             self._next()
@@ -926,6 +941,9 @@ class PrattParser:
         start_tok = self._peek()
         self._expect(TokenType.KEYWORD, 'enum')
         name_tok = self._expect(TokenType.IDENTIFIER)
+        if name_tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected enum name")
         values = []
         if self._peek() and self._peek().type == TokenType.BRACKET and self._peek().value == '{':
             self._next()
@@ -975,17 +993,26 @@ class PrattParser:
                 elif self.pos+1 < len(self.tokens) and self.tokens[self.pos+1].type == TokenType.IDENTIFIER:
                     self._next(); typ = Identifier(typ_tok.value)
             name_tok = self._expect(TokenType.IDENTIFIER)
+            if name_tok is None:
+                if self._recovery_mode:
+                    self._skip_until_sync()
+                    return params  # return partial params
+                raise SyntaxError("Expected parameter name")
             default = None
             if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
                 self._next(); default = self.parse_expr(0)
-            if name_tok: params.append({'name':name_tok.value, 'type':typ, 'default':default})
+            params.append({'name':name_tok.value, 'type':typ, 'default':default})
             if self._peek() and self._peek().type == TokenType.COMMA: self._next()
         self._expect(TokenType.BRACKET, ')')
         return params
 
     def _parse_method_decl(self):
         start_tok = self._peek()
-        self._expect(TokenType.KEYWORD, 'method'); name_tok = self._expect(TokenType.IDENTIFIER)
+        self._expect(TokenType.KEYWORD, 'method')
+        name_tok = self._expect(TokenType.IDENTIFIER)
+        if name_tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected method name")
         params = self._parse_params()
         self._expect(TokenType.OPERATOR, '=>')
         body = []
@@ -1004,6 +1031,9 @@ class PrattParser:
     def _parse_function_decl(self):
         start_tok = self._peek()
         name_tok = self._expect(TokenType.IDENTIFIER)
+        if name_tok is None:
+            if self._recovery_mode: self._skip_until_sync(); return None
+            raise SyntaxError("Expected function name")
         params = self._parse_params()
         if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=>': self._next()
         else:
