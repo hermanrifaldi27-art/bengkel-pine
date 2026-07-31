@@ -693,11 +693,35 @@ class PrattParser:
         if target.span: node.span = SourceSpan(target.span.start_line, target.span.start_col, self.tokens[self.pos-1].line, self.tokens[self.pos-1].col+1)
         return node
 
+    def _try_parse_keyword_arg(self):
+        """Coba parse keyword argument: identifier = expr.
+        Kembalikan Assignment node jika match, None jika bukan keyword arg."""
+        saved = self.pos
+        tok = self._peek()
+        if tok and tok.type == TokenType.IDENTIFIER:
+            self._next()
+            nxt = self._peek()
+            if nxt and nxt.type == TokenType.OPERATOR and nxt.value == '=':
+                self._next()
+                value = self.parse_expr(0)
+                if value is not None:
+                    target = Identifier(tok.value)
+                    if hasattr(tok, 'line'):
+                        target.span = SourceSpan(tok.line, tok.col, tok.line, tok.col + len(tok.value))
+                    node = Assignment(target, value)
+                    if target.span and value.span:
+                        node.span = SourceSpan(target.span.start_line, target.span.start_col, value.span.end_line, value.span.end_col)
+                    return node
+        self.pos = saved
+        return None
+
     def _parse_call(self, func):
         self._next(); args = []
         while self._peek() and not (self._peek().type == TokenType.BRACKET and self._peek().value == ')'):
             self._skip_comments_and_newlines()
-            arg = self.parse_expr(0)
+            arg = self._try_parse_keyword_arg()
+            if arg is None:
+                arg = self.parse_expr(0)
             if arg is None: break
             args.append(arg)
             if self._peek() and self._peek().type == TokenType.COMMA: self._next()
@@ -1151,6 +1175,7 @@ class PineAST:
         self.parser = PrattParser(self.tokens, recovery=True)
         self.root = self._parse_module()
         self._extract_symbols(self.root)
+        self._extract_symbols_fallback()
 
     def _parse_module(self):
         body = []
@@ -1271,6 +1296,16 @@ class PineAST:
             self._extract_symbols(node.start); self._extract_symbols(node.end)
             if node.step: self._extract_symbols(node.step)
 
+    def _extract_symbols_fallback(self):
+        import re
+        for m in re.finditer(r'var\s+(\w+)\s*=\s*(array|matrix)\.new', self.code):
+            name, kind = m.group(1), m.group(2)
+            if kind == 'array' and name not in self.arrays:
+                self.arrays.append(name)
+                self.symbols[name] = 'array'
+            elif kind == 'matrix' and name not in self.matrices:
+                self.matrices.append(name)
+                self.symbols[name] = 'matrix'
     def get_symbols(self): return self.symbols
     def get_arrays(self): return self.arrays.copy()
     def get_matrices(self): return self.matrices.copy()

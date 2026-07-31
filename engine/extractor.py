@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 """
 PineAST Extractor v5.2 — CFG-aware, flow-sensitive, scope-safe
 """
@@ -181,11 +182,19 @@ class FeatureExtractor(ASTVisitor):
 
     def visit_VarDeclaration(self, node):
         if node.value and isinstance(node.value, Identifier) and node.value.name == 'na':
-            sym = self.semantic.get_symbol(node.name)
-            if sym and sym.type and sym.type == TYPE_INT:
+            is_int = False
+            if node.type:
+                tn = node.type.name if isinstance(node.type, Identifier) else getattr(node.type, 'name', None)
+                if tn == 'int':
+                    is_int = True
+            if not is_int:
+                sym = self.semantic.get_symbol(node.name)
+                if sym and sym.type and sym.type == TYPE_INT:
+                    is_int = True
+            if is_int:
                 self._add_feature('state', f"var int {node.name} = na -> ubah ke 0",
-                                  f"var int {node.name} = 0", 'STATE', 'var_int_na_v1',
-                                  anchor=node.span, diag_code='PINE0001')
+                    f"var int {node.name} = 0", 'STATE', 'var_int_na_v1',
+                    anchor=node.span, diag_code='PINE0001')
         self._detect_unused_variable(node)
         self._collect_array_matrix_info(node)
         self.generic_visit(node)
@@ -229,40 +238,81 @@ class FeatureExtractor(ASTVisitor):
         self.generic_visit(node)
 
     def _check_request_security(self, node: Call):
-        has_valid = False
+        has_lookahead = False
+        has_gaps = False
+        # Cek dari AST args (Assignment nodes)
         for arg in node.args:
-            if isinstance(arg, Assignment) and isinstance(arg.target, Identifier) and arg.target.name == 'lookahead':
-                scope = self.semantic.get_scope_of(arg)
-                val = self.semantic.evaluate_constant(arg.value, scope)
-                actual_val = None
-                if isinstance(val, ConstantValue):
-                    actual_val = str(val.value)
-                elif hasattr(val, 'value'):
-                    actual_val = str(val.value)
-                elif isinstance(val, str):
-                    actual_val = val
-                if actual_val and 'lookahead_off' in actual_val:
-                    has_valid = True
-            # Juga cek parameter gaps
-            has_gaps = False
-            for arg in node.args:
-                if isinstance(arg, Assignment) and isinstance(arg.target, Identifier) and arg.target.name == 'gaps':
-                    val = self.semantic.evaluate_constant(arg.value)
-                    actual_val = str(val.value) if hasattr(val, 'value') else str(val)
-                    if 'gaps_off' in actual_val:
-                        has_gaps = True
-            if not has_valid and not has_gaps:
-                self._add_feature('data_fetching',
-                    'request.security tanpa lookahead dan gaps — tambahkan gaps=barmerge.gaps_off',
-                    'request.security(..., gaps = barmerge.gaps_off)',
-                    'DATA_FETCHING', 'security_gaps_v1',
-                    anchor=node.span, diag_code='PINE0017')
-        if not has_valid:
+            if not isinstance(arg, Assignment):
+                continue
+            if not isinstance(arg.target, Identifier):
+                continue
+            val_str = self._resolve_value_str(arg.value)
+            if arg.target.name == 'lookahead' and val_str and 'lookahead_off' in val_str:
+                has_lookahead = True
+            if arg.target.name == 'gaps' and val_str and 'gaps_off' in val_str:
+                has_gaps = True
+        # Regex fallback: parser tidak parse keyword args sebagai Assignment
+        if not has_lookahead or not has_gaps:
+            src = self._get_source_for_node(node)
+            if src:
+                if not has_lookahead and re.search(r'lookahead\s*=\s*barmerge\.lookahead_off', src):
+                    has_lookahead = True
+                if not has_gaps and re.search(r'gaps\s*=\s*barmerge\.gaps_off', src):
+                    has_gaps = True
+        if not has_lookahead and not has_gaps:
+            self._add_feature('data_fetching',
+                'request.security tanpa lookahead dan gaps — tambahkan gaps=barmerge.gaps_off',
+                'request.security(..., gaps = barmerge.gaps_off)',
+                'DATA_FETCHING', 'security_gaps_v1',
+                anchor=node.span, diag_code='PINE0017')
+        if not has_lookahead:
             self._add_feature('data_fetching', 'request.security tanpa lookahead_off -> tambahkan',
-                              'request.security(..., lookahead = barmerge.lookahead_off)',
-                              'DATA_FETCHING', 'request_security_lookahead_v1',
-                              anchor=node.span, diag_code='PINE0005')
+                'request.security(..., lookahead = barmerge.lookahead_off)',
+                'DATA_FETCHING', 'request_security_lookahead_v1',
+                anchor=node.span, diag_code='PINE0005')
 
+    def _resolve_value_str(self, node):
+        """Resolve AST node ke string representation, tanpa dependency semantic."""
+        if node is None:
+            return None
+        # Coba semantic evaluate dulu
+        try:
+            val = self.semantic.evaluate_constant(node)
+            if isinstance(val, ConstantValue):
+                return str(val.value)
+            if hasattr(val, 'value'):
+                return str(val.value)
+            if isinstance(val, str):
+                return val
+        except Exception:
+            pass
+        # Fallback: cek tipe AST langsung
+        if isinstance(node, QualifiedName):
+            return '.'.join(node.parts)
+        if isinstance(node, MemberAccess):
+            return self._get_func_name(node)
+        if isinstance(node, Identifier):
+            return node.name
+        if isinstance(node, StringLiteral):
+            return node.value
+        return None
+
+    def _get_source_for_node(self, node):
+        """Ambil source code untuk node berdasarkan span."""
+        span = getattr(node, 'span', None)
+        if not span or not self.code:
+            return None
+        try:
+            lines = self.code.split('\n')
+            start_line = getattr(span, 'start_line', 0) - 1
+            end_line = getattr(span, 'end_line', start_line + 1) - 1
+            if start_line < 0 or start_line >= len(lines):
+                return None
+            if start_line == end_line:
+                return lines[start_line]
+            return '\n'.join(lines[start_line:end_line + 1])
+        except Exception:
+            return None
 
     def _detect_security_in_loop(self, node: Call):
         """Deteksi request.security() di dalam loop."""
@@ -346,16 +396,23 @@ class FeatureExtractor(ASTVisitor):
         """Deteksi request.security dengan lookahead_on."""
         func_name = self._get_func_name(node.func)
         if func_name == 'request.security':
+            has_on = False
             for arg in node.args:
                 if isinstance(arg, Assignment) and isinstance(arg.target, Identifier) and arg.target.name == 'lookahead':
-                    val = self.semantic.evaluate_constant(arg.value)
-                    actual_val = str(val.value) if hasattr(val, 'value') else str(val)
-                    if 'lookahead_on' in actual_val:
-                        self._add_feature('data_fetching',
-                            'request.security dengan lookahead_on -> bias future, gunakan lookahead_off',
-                            'lookahead = barmerge.lookahead_off',
-                            'DATA_FETCHING', 'lookahead_bias_v1',
-                            anchor=node.span, diag_code='PINE0014')
+                    val_str = self._resolve_value_str(arg.value)
+                    if val_str and 'lookahead_on' in val_str:
+                        has_on = True
+            # Regex fallback
+            if not has_on:
+                src = self._get_source_for_node(node)
+                if src and re.search(r'lookahead\s*=\s*barmerge\.lookahead_on', src):
+                    has_on = True
+            if has_on:
+                self._add_feature('data_fetching',
+                    'request.security dengan lookahead_on -> bias future, gunakan lookahead_off',
+                    'lookahead = barmerge.lookahead_off',
+                    'DATA_FETCHING', 'lookahead_bias_v1',
+                    anchor=node.span, diag_code='PINE0014')
 
     def _detect_var_unused(self, node: VarDeclaration):
         """Deteksi var yang tidak pernah di-assign ulang (hanya deklarasi)."""
