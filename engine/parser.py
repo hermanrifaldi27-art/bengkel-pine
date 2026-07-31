@@ -1272,9 +1272,9 @@ class PineAST:
             if node.step: self._extract_symbols(node.step)
 
     def get_symbols(self): return self.symbols
-    def get_arrays(self): return self.arrays
-    def get_matrices(self): return self.matrices
-    def get_constants(self): return self.constants
+    def get_arrays(self): return self.arrays.copy()
+    def get_matrices(self): return self.matrices.copy()
+    def get_constants(self): return dict(self.constants)
     def get_functions(self): return self.functions
     def get_types(self): return self.types
     def get_enums(self): return self.enums
