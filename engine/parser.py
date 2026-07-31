@@ -906,10 +906,15 @@ class PrattParser:
                         if field_type is None: field_type = Identifier(typ_tok.value)
                     else: field_type = Identifier(typ_tok.value)
                 field_name = self._expect(TokenType.IDENTIFIER)
+                if field_name is None:
+                    if self._recovery_mode:
+                        self._skip_until_sync()
+                        break
+                    raise SyntaxError("Expected field name")
                 default = None
                 if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
                     self._next(); default = self.parse_expr(0)
-                if field_type and field_name: fields.append(TypeField(field_name.value, field_type, default))
+                if field_type: fields.append(TypeField(field_name.value, field_type, default))
                 if self._peek() and self._peek().type == TokenType.COMMA: self._next()
             self._expect(TokenType.BRACKET, '}')
         else:
@@ -950,12 +955,16 @@ class PrattParser:
             while self._peek() and not (self._peek().type == TokenType.BRACKET and self._peek().value == '}'):
                 self._skip_comments_and_newlines()
                 val_tok = self._expect(TokenType.IDENTIFIER)
+                if val_tok is None:
+                    if self._recovery_mode:
+                        self._skip_until_sync()
+                        break
+                    raise SyntaxError("Expected enum value name")
                 title = None
                 if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
                     self._next(); title = self.parse_expr(0)
-                if val_tok:
-                    if title: values.append((val_tok.value, title))
-                    else: values.append(val_tok.value)
+                if title: values.append((val_tok.value, title))
+                else: values.append(val_tok.value)
                 if self._peek() and self._peek().type == TokenType.COMMA: self._next()
             self._expect(TokenType.BRACKET, '}')
         else:
@@ -964,12 +973,16 @@ class PrattParser:
                 self._next()
             while self._peek() and self._peek().type not in (TokenType.DEDENT, TokenType.EOF):
                 val_tok = self._expect(TokenType.IDENTIFIER)
+                if val_tok is None:
+                    if self._recovery_mode:
+                        self._skip_until_sync()
+                        break
+                    raise SyntaxError("Expected enum value name")
                 title = None
                 if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
                     self._next(); title = self.parse_expr(0)
-                if val_tok:
-                    if title: values.append((val_tok.value, title))
-                    else: values.append(val_tok.value)
+                if title: values.append((val_tok.value, title))
+                else: values.append(val_tok.value)
                 if self._peek() and self._peek().type == TokenType.COMMA: self._next()
                 self._skip_comments_and_newlines()
             if self._peek() and self._peek().type == TokenType.DEDENT: self._next()
@@ -1179,7 +1192,11 @@ class PrattParser:
                     default_body = self._parse_block(); break
                 if self._peek().type == TokenType.KEYWORD and self._peek().value == 'case': self._next()
                 case_value = self.parse_expr(0)
-                if case_value is None: break
+                if case_value is None:
+                    if self._recovery_mode:
+                        self._skip_until_sync()
+                        continue
+                    raise SyntaxError("Expected case value")
                 if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=>': self._next()
                 else:
                     if self._recovery_mode: self._skip_until_sync(); continue
