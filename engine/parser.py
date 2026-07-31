@@ -637,8 +637,25 @@ class PrattParser:
             self._skip_comments_and_newlines()
             if not self._peek(): break
             typ = None
-            # Gunakan _parse_type untuk menangani generic/qualified type
-            typ = self._parse_type()
+            # Cek apakah ada tipe: identifier diikuti identifier atau generic
+            if self._peek().type == TokenType.IDENTIFIER:
+                typ_tok = self._peek()
+                # Cek apakah token berikutnya adalah identifier (berarti typ_tok adalah tipe)
+                if self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].type == TokenType.IDENTIFIER:
+                    # Ada tipe, ambil tipe
+                    self._next()  # konsumsi typ_tok
+                    # Cek generic
+                    if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '<':
+                        typ = self._try_parse_generic(Identifier(typ_tok.value))
+                        if typ is None: typ = Identifier(typ_tok.value)
+                    else:
+                        typ = Identifier(typ_tok.value)
+                elif self.pos + 1 < len(self.tokens) and self.tokens[self.pos + 1].type == TokenType.OPERATOR and self.tokens[self.pos + 1].value == '<':
+                    # Generic type
+                    self._next()
+                    typ = self._try_parse_generic(Identifier(typ_tok.value))
+                    if typ is None: typ = Identifier(typ_tok.value)
+                # Jika tidak ada tipe, biarkan typ = None
             name_tok = self._expect(TokenType.IDENTIFIER)
             default = None
             if self._peek() and self._peek().type == TokenType.OPERATOR and self._peek().value == '=':
