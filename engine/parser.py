@@ -886,6 +886,50 @@ class PrattParser:
         node.span = SourceSpan(name_tok.line, name_tok.col, name_tok.line, name_tok.col+len(name_tok.value))
         return node
 
+    def _parse_body_with_indent_or_braces(self, parse_item_fn):
+        """Helper untuk parse body dengan { } atau INDENT/DEDENT.
+        
+        Args:
+            parse_item_fn: Function yang parse satu item dan return (name, value) tuple
+                          atau None jika gagal
+        
+        Returns:
+            List of (name, value) tuples
+        """
+        items = []
+        
+        # Bracket mode: { ... }
+        if self._peek() and self._peek().type == TokenType.BRACKET and self._peek().value == '{':
+            self._next()  # consume {
+            while self._peek() and not (self._peek().type == TokenType.BRACKET and self._peek().value == '}'):
+                self._skip_comments_and_newlines()
+                result = parse_item_fn()
+                if result is None:
+                    if self._recovery_mode:
+                        self._skip_until_sync()
+                        break
+                    raise SyntaxError("Failed to parse item in bracket block")
+                items.append(result)
+                if self._peek() and self._peek().type == TokenType.COMMA:
+                    self._next()
+            self._expect(TokenType.BRACKET, '}')
+        
+        # Indent mode
+        else:
+            self._skip_comments_and_newlines()
+            if self._peek() and self._peek().type == TokenType.INDENT:
+                self._next()  # consume INDENT
+                while self._peek() and self._peek().type not in (TokenType.DEDENT, TokenType.EOF):
+                    self._skip_comments_and_newlines()
+                    result = parse_item_fn()
+                    if result is None:
+                        break
+                    items.append(result)
+                if self._peek() and self._peek().type == TokenType.DEDENT:
+                    self._next()  # consume DEDENT
+        
+        return items
+
     def _parse_type_decl(self):
         start_tok = self._peek()
         self._expect(TokenType.KEYWORD, 'type')
